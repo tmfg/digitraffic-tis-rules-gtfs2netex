@@ -8,7 +8,7 @@ out/
 bin/
 build/
 .mvn/wrapper/maven-wrapper.jar
-
+node_modules/
 # JetBrains IDE metadata
 *.iml
 .idea/

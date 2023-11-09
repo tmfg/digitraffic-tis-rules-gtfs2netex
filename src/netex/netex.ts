@@ -133,13 +133,15 @@ function createNetexLineFromGtfsRoute(gtfs: Gtfs, parent: Element, gtfsRoute: Ro
     return lineElement; // Return the 'lineElement'
 }
 
+const USE_AGENCY_CODESPACES = true; // process.env.USE_AGENCY_CODESPACES === 'true'
+
  // Create the StopPlace and ScheduleStopPoint elements
 function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIndex: { [stop_id: string]: Stop }) {
 
     const agency = findAgencyForId(gtfs, gtfsRoute.agency_id);
     const feedInfo = gtfs.feed_info && gtfs.feed_info[0];
     const cs = getCodeSpaceForAgency(agency, feedInfo as FeedInfo);
-    const stopCs = process.env.USE_AGENCY_CODESPACES? cs: 'FSR:';
+    const stopCs = USE_AGENCY_CODESPACES? cs: 'FSR:';
     const siteFrame = xmlDoc.get('//SiteFrame') as Element;
     const serviceFrame = xmlDoc.get('//ServiceFrame') as Element;
     const stopPlaces = siteFrame.node('stopPlaces');

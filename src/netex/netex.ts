@@ -2,7 +2,21 @@ import { Agency, Gtfs, Route, Stop, StopTime, Trip, FeedInfo } from "../utils/gt
 import * as fs from "fs";
 import libxmljs, { Document, Element, Namespace } from "libxmljs2";
 import _ from 'lodash';
-import { findAgencyForId, getNetexOperatorId, getNetexLineId, getTransportMode, findTripsForRouteId, findStopsForTrips, findStopTimesForTripId, getCodeSpaceForAgency, writeXmlDocToFile, indexStopTimesByTripId, indexStopsById, replaceAttributeContainingString } from "./utils";
+import {
+    findAgencyForId,
+    getNetexOperatorId,
+    getNetexLineId,
+    getTransportMode,
+    findTripsForRouteId,
+    findStopsForTrips,
+    findStopTimesForTripId,
+    getCodeSpaceForAgency,
+    writeXmlDocToFile,
+    indexStopTimesByTripId,
+    indexStopsById,
+    replaceAttributeContainingString,
+    getTranslationsMap
+} from "./utils";
 import { createDayTypesForRoute } from "./daytypes";
 import { rootLogger } from "../utils/logger";
 import path from "path";
@@ -84,13 +98,33 @@ function createNetexLineFromGtfsRoute(gtfs: Gtfs, parent: Element, gtfsRoute: Ro
     const lines = parent.get('lines') as Element;
     const feedInfo = gtfs.feed_info && gtfs.feed_info[0];
 
+    const lineNameTranslationsMap: Record<string, Record<string, string>> = getTranslationsMap(
+        gtfs.translations || [],
+        'routes',
+        'route_long_name'
+    );
+
     // Create the Line element
     const lineElement = lines.node('Line').attr({ id: getNetexLineId(gtfsRoute, agency, feedInfo as FeedInfo), version: '1' });
 
     // Set the required attributes and elements for the Line element using GTFS route properties
+
     if (!_.isEmpty(gtfsRoute.route_long_name)) {
         lineElement.node('Name').text(gtfsRoute.route_long_name);
+
+        // Line name localization commented out for now as schema validation fails
+        // // Check if there are translations for this route name
+        // if (lineNameTranslationsMap[gtfsRoute.route_id]) {
+        //     const alternativeNames = lineElement.node('alternativeNames');
+        //     for (const language in lineNameTranslationsMap[gtfsRoute.route_id]) {
+        //         const translatedName = lineNameTranslationsMap[gtfsRoute.route_id][language];
+        //         const alternativeName = alternativeNames.node('AlternativeName');
+        //         alternativeName.attr({ lang: language });
+        //         alternativeName.node('Name').text(translatedName);
+        //     }
+        // }
     }
+
     lineElement.node('TransportMode').text(getTransportMode(gtfsRoute.route_type));
     if (!_.isEmpty(gtfsRoute.route_short_name)) {
         lineElement.node('PublicCode').text(gtfsRoute.route_short_name);
@@ -99,14 +133,13 @@ function createNetexLineFromGtfsRoute(gtfs: Gtfs, parent: Element, gtfsRoute: Ro
     return lineElement; // Return the 'lineElement'
 }
 
-const USE_AGENCY_CODESPACES = true; // process.env.USE_AGENCY_CODESPACES === 'true';
-
  // Create the StopPlace and ScheduleStopPoint elements
 function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIndex: { [stop_id: string]: Stop }) {
+
     const agency = findAgencyForId(gtfs, gtfsRoute.agency_id);
     const feedInfo = gtfs.feed_info && gtfs.feed_info[0];
     const cs = getCodeSpaceForAgency(agency, feedInfo as FeedInfo);
-    const stopCs = USE_AGENCY_CODESPACES? cs: 'FSR:';
+    const stopCs = process.env.USE_AGENCY_CODESPACES? cs: 'FSR:';
     const siteFrame = xmlDoc.get('//SiteFrame') as Element;
     const serviceFrame = xmlDoc.get('//ServiceFrame') as Element;
     const stopPlaces = siteFrame.node('stopPlaces');
@@ -116,8 +149,11 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
     const stops = findStopsForTrips(gtfs, stopIndex, trips);
     const transportMode = getTransportMode(gtfsRoute.route_type);
     const stopPlacesMap: { [stopPlaceId: string]: Element } = {};
+    const translationsMap: Record<string, Record<string, string>> = getTranslationsMap(gtfs.translations || [], 'stops', 'stop_name');
+
     for (let i = 0; i < stops.length; i++) {
         const stop = stops[i];
+
         const parentStop = stopIndex[stop.parent_station];
         const mainStopToUse = parentStop ? parentStop : stop;
 
@@ -129,7 +165,24 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
             // Create the StopPlace if it hasn't been created yet
             stopPlace = stopPlaces.node('StopPlace').attr({ id: stopPlaceId, version: '1' });
             stopPlace.node('Name').text(mainStopToUse.stop_name);
+
+            // Include translated names if available
+            const translations = translationsMap[mainStopToUse.stop_id];
+            if (translations) {
+                const alternativeNames = stopPlace.node('alternativeNames');
+                for (const [language, translation] of Object.entries(translations)) {
+                    alternativeNames
+                        .node('AlternativeName')
+                        .node('NameType')
+                        .text('translation')
+                        .parent()
+                        .node('Name')
+                        .attr({ lang: language })
+                        .text(translation);
+                }
+            }
             stopPlace.node('TransportMode').text(getTransportMode(gtfsRoute.route_type));
+
             // Store the created StopPlace in the map
             stopPlacesMap[stopPlaceId] = stopPlace;
         }
@@ -235,6 +288,7 @@ function createNetexJourneys(
         });
         const dayType = dayTypes[trip.service_id];
 
+        // should be put  trip.trip_headsign somewhere here?
         serviceJourney.node('Name').text(gtfsRoute.route_short_name);
         serviceJourney.node('dayTypes')
             .node('DayTypeRef').attr({ref: dayType?.attr('id')?.value() || 'UNKNOWN', version: '1'});

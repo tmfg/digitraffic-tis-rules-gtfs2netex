@@ -1,7 +1,7 @@
 import _ from "lodash";
-import { Agency, Calendar, CalendarDate, Gtfs, Route, Stop, StopTime, Trip, FeedInfo } from "../utils/gtfs-types";
-import { Agent } from "http";
-import { Document, Element } from "libxmljs2";
+import {Agency, Calendar, CalendarDate, Gtfs, Route, Stop, StopTime, Trip, FeedInfo, Translation} from "../utils/gtfs-types";
+import {Agent} from "http";
+import {Document, Element} from "libxmljs2";
 import * as fs from 'fs';
 
 function findAgencyForId(gtfs: Gtfs, agencyId: string): Agency {
@@ -107,20 +107,23 @@ function getTransportMode(gtfsRouteType: number): string {
         702: 'bus',
         703: 'bus',
         704: 'bus',
+        715: 'bus',
         4: 'water',
         5: 'cablecar',
         6: 'gondola',
         7: 'funicular',
         1100: 'air'
     };
-
-  return gtfsToNetexTransportMode[gtfsRouteType] || 'unknown';
+    const mode = gtfsToNetexTransportMode[gtfsRouteType];
+    if (mode) {
+        return mode;
+    }
+    console.warn('Unknown GTFS route type: ' + gtfsRouteType);
+    return 'other';
 }
 
-const CODESPACE_FROM_FEEDINFO = true; //process.env.CODESPACE_FROM_FEEDINFO === 'true';
-
 function getCodeSpaceForAgency(gtfsAgency: Agency, feedInfo: FeedInfo): string {
-    if (CODESPACE_FROM_FEEDINFO) {
+    if (process.env.CODESPACE_FROM_FEEDINFO) {
         // Use the first 3 letters of feed_publisher_name as codespace
         const publisherName = feedInfo?.feed_publisher_name || 'OTH';
         return publisherName.slice(0, 3).toUpperCase() + ':';
@@ -164,18 +167,48 @@ function getCodeSpaceForAgencyByUrl(url: string): string {
 }
 
 function replaceAttributeContainingString(xmlDoc: Document, attributeName: string, searchString: string, replacement: string): void {
-  const rootElement: Element = xmlDoc.root()!;
-  const elements: Element[] = rootElement.find(`//*[contains(@${attributeName}, '${searchString}')]`); // Find all elements with the specified attribute containing the search string
+    const rootElement: Element = xmlDoc.root()!;
+    const elements: Element[] = rootElement.find(`//*[contains(@${attributeName}, '${searchString}')]`); // Find all elements with the specified attribute containing the search string
 
-  for (const element of elements) {
-    const attribute = element.attr(attributeName);
+    for (const element of elements) {
+        const attribute = element.attr(attributeName);
 
-    if (attribute) {
-      const oldValue = attribute.value();
-      const newValue = oldValue.replace(new RegExp(searchString, 'g'), replacement);
-      attribute.value(newValue);
+        if (attribute) {
+            const oldValue = attribute.value();
+            const newValue = oldValue.replace(new RegExp(searchString, 'g'), replacement);
+            attribute.value(newValue);
+        }
     }
-  }
+}
+
+// Function to generate a translations map
+function getTranslationsMap(
+    translations: Translation[],
+    table_name: string,
+    field_name: string
+): Record<string, Record<string, string>> {
+    const translationsMap: Record<string, Record<string, string>> = {};
+
+    // Populate the translations map with Translation objects
+    translations.forEach(translation => {
+        const {
+            table_name: translationTableName,
+            field_name: translationFieldName,
+            language,
+            translation: translatedName,
+            record_id
+        } = translation;
+
+        // Check if it's a translation for the specified table and field, and has a record_id
+        if (translationTableName === table_name && translationFieldName === field_name && record_id) {
+            if (!translationsMap[record_id]) {
+                translationsMap[record_id] = {};
+            }
+            translationsMap[record_id][language] = translatedName;
+        }
+    });
+
+    return translationsMap;
 }
 
 function writeXmlDocToFile(xmlDoc: Document, outputPath: string, filename: string): void {
@@ -184,13 +217,29 @@ function writeXmlDocToFile(xmlDoc: Document, outputPath: string, filename: strin
 
     // Ensure the output directory exists
     if (!fs.existsSync(outputPath)) {
-        fs.mkdirSync(outputPath, { recursive: true });
+        fs.mkdirSync(outputPath, {recursive: true});
     }
 
     // Write the xmlDoc to the file
-    fs.writeFileSync(filePath, xmlString, { encoding: 'utf8' });
+    fs.writeFileSync(filePath, xmlString, {encoding: 'utf8'});
 }
 
-export { findAgencyForId, findRouteForId, findTripsForRouteId, findStopsForTrips, findStopTimesForTripId, indexStopTimesByTripId,
-    indexStopsById, getNetexLineId, getNetexOperatorId, getTransportMode, findCalendarsForTrips, findCalendarDatesForTrips,
-    getCodeSpaceForAgency, replaceAttributeContainingString, writeXmlDocToFile, findParentStop };
+export {
+    findAgencyForId,
+    findRouteForId,
+    findTripsForRouteId,
+    findStopsForTrips,
+    findStopTimesForTripId,
+    indexStopTimesByTripId,
+    indexStopsById,
+    getNetexLineId,
+    getNetexOperatorId,
+    getTransportMode,
+    findCalendarsForTrips,
+    findCalendarDatesForTrips,
+    getCodeSpaceForAgency,
+    replaceAttributeContainingString,
+    writeXmlDocToFile,
+    getTranslationsMap,
+    findParentStop
+};

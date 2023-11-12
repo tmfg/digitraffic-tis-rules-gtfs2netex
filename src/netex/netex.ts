@@ -110,19 +110,19 @@ function createNetexLineFromGtfsRoute(gtfs: Gtfs, parent: Element, gtfsRoute: Ro
     // Set the required attributes and elements for the Line element using GTFS route properties
 
     if (!_.isEmpty(gtfsRoute.route_long_name)) {
+        // Check if there are translations for this route name
+        if (lineNameTranslationsMap[gtfsRoute.route_id]) {
+            const alternativeTexts = lineElement.node('alternativeTexts');
+            for (const language in lineNameTranslationsMap[gtfsRoute.route_id]) {
+                const translatedName = lineNameTranslationsMap[gtfsRoute.route_id][language];
+                const alternativeText = alternativeTexts.node('AlternativeText');
+                alternativeText.attr({ attributeName: 'Name'});
+                const text = alternativeText.node('Text');
+                text.attr({ lang: language });
+                text.text(translatedName);
+            }
+        }
         lineElement.node('Name').text(gtfsRoute.route_long_name);
-
-        // Line name localization commented out for now as schema validation fails
-        // // Check if there are translations for this route name
-        // if (lineNameTranslationsMap[gtfsRoute.route_id]) {
-        //     const alternativeNames = lineElement.node('alternativeNames');
-        //     for (const language in lineNameTranslationsMap[gtfsRoute.route_id]) {
-        //         const translatedName = lineNameTranslationsMap[gtfsRoute.route_id][language];
-        //         const alternativeName = alternativeNames.node('AlternativeName');
-        //         alternativeName.attr({ lang: language });
-        //         alternativeName.node('Name').text(translatedName);
-        //     }
-        // }
     }
 
     lineElement.node('TransportMode').text(getTransportMode(gtfsRoute.route_type));

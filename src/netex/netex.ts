@@ -57,33 +57,34 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string): Promise<string> {
 }
 
 function createNetexDocumentTemplate(): Document {
-  // Create a new XML document
-  const xmlDoc = new libxmljs.Document();
+    // Create a new XML document
+    const xmlDoc = new libxmljs.Document();
 
-  // Create the PublicationDelivery element (root element)
-  const publicationDelivery = xmlDoc
-    .node('PublicationDelivery')
-    .namespace('http://www.netex.org.uk/netex');
+    // Create the PublicationDelivery element (root element)
+    const publicationDelivery = xmlDoc
+        .node('PublicationDelivery')
+        .namespace('http://www.netex.org.uk/netex');
 
-  const publicationTimestamp = publicationDelivery.node('PublicationTimestamp', new Date().toISOString());
-  const participantRef = publicationDelivery.node('ParticipantRef', 'FSR');
-  const dataObjects = publicationDelivery.node('dataObjects');
+    const publicationTimestamp = publicationDelivery.node('PublicationTimestamp', new Date().toISOString());
+    const participantRef = publicationDelivery.node('ParticipantRef', 'FSR');
+    const dataObjects = publicationDelivery.node('dataObjects');
 
-  // Create the CompositeFrame element and its relevant child elements in correct order
-  const compositeFrame = dataObjects.node('CompositeFrame').attr({ id: 'CompositeFrame_1', version: '1' });
-  const frames = compositeFrame.node('frames');
-  const resourceFrame = frames.node('ResourceFrame').attr({ id: 'ResourceFrame_1', version: '1' });
-  const organisations = resourceFrame.node('organisations');
-  const siteFrame = frames.node('SiteFrame').attr({ id: 'SiteFrame_1', version: '1' });
-  const serviceFrame = frames.node('ServiceFrame').attr({ id: 'ServiceFrame_1', version: '1' });
-  const lines = serviceFrame.node('lines');
-  const scheduledStopPoints = serviceFrame.node('scheduledStopPoints');
-  const stopAssignments = serviceFrame.node('stopAssignments');
-  const journeyPatterns = serviceFrame.node('journeyPatterns');
-  const serviceCalendarFrame = frames.node('ServiceCalendarFrame').attr({ id: 'ServiceCalendarFrame_1', version: '1' });
-  const timetableFrame = frames.node('TimetableFrame').attr({ id: 'TimetableFrame_1', version: '1' });
+    // Create the CompositeFrame element and its relevant child elements in correct order
+    const compositeFrame = dataObjects.node('CompositeFrame').attr({ id: 'CompositeFrame_1', version: '1' });
+    const frames = compositeFrame.node('frames');
+    const resourceFrame = frames.node('ResourceFrame').attr({ id: 'ResourceFrame_1', version: '1' });
+    const organisations = resourceFrame.node('organisations');
+    const siteFrame = frames.node('SiteFrame').attr({ id: 'SiteFrame_1', version: '1' });
+    const serviceFrame = frames.node('ServiceFrame').attr({ id: 'ServiceFrame_1', version: '1' });
+    const lines = serviceFrame.node('lines');
+    const destinationDisplays = serviceFrame.node('destinationDisplays');
+    const scheduledStopPoints = serviceFrame.node('scheduledStopPoints');
+    const stopAssignments = serviceFrame.node('stopAssignments');
+    const journeyPatterns = serviceFrame.node('journeyPatterns');
+    const serviceCalendarFrame = frames.node('ServiceCalendarFrame').attr({ id: 'ServiceCalendarFrame_1', version: '1' });
+    const timetableFrame = frames.node('TimetableFrame').attr({ id: 'TimetableFrame_1', version: '1' });
 
-  return xmlDoc;
+    return xmlDoc;
 }
 
 function createNetexOperatorFromGtfsRoute(gtfs: Gtfs, parent: Element, gtfsRoute: Route) : Element {
@@ -246,13 +247,41 @@ function createNetexJourneys(
     //console.log('trip ids', tripIds.join(', '));
     const journeyPatternsMap: { [key: string]: Element } = {};
     const vehicleJourneys = timetableFrame.node('vehicleJourneys');
+    const destinationDisplaysMap: { [trip_headsign: string]: Element } = {};
+    const destinationDisplays = serviceFrame.get('destinationDisplays') as Element;
     const cs = getCodeSpaceForAgency(agency, feedInfo);
+    const translationsMap: Record<string, Record<string, string>> = getTranslationsMap(gtfs.translations || [], 'trips', 'trip_headsign');
+
     for (const trip of trips) {
         //console.log('trip id', trip.trip_id);
         const stopTimes = findStopTimesForTripId(stoptimesIndex, trip.trip_id);
         const stopIds = stopTimes.map(st => st.stop_id);
         const key = stopIds.join(',');
         let journeyPattern = journeyPatternsMap[key];
+
+        // Create a DestinationDisplay element if it doesn't exist for this trip_headsign
+        if (trip.trip_headsign && !destinationDisplaysMap[trip.trip_headsign]) {
+            const destinationDisplay = destinationDisplays
+                .node('DestinationDisplay')
+                .attr({ version: '1', id: cs + 'DestinationDisplay:' + trip.trip_headsign });
+
+            // Include translated headsign if available
+            const translations = translationsMap[trip.trip_id];
+            if (translations) {
+                const alternativeTexts = destinationDisplay.node('alternativeTexts');
+                for (const language in translationsMap[trip.trip_id]) {
+                    const translatedName = translationsMap[trip.trip_id][language];
+                    const alternativeText = alternativeTexts.node('AlternativeText');
+                    alternativeText.attr({ attributeName: 'FrontText'});
+                    const text = alternativeText.node('Text');
+                    text.attr({ lang: language });
+                    text.text(translatedName);
+                }
+            }
+
+            destinationDisplay.node('FrontText').text(trip.trip_headsign);
+            destinationDisplaysMap[trip.trip_headsign] = destinationDisplay;
+        }
 
         // Check if a JourneyPattern with the same sequence of stops already exists
         if (!journeyPattern) {
@@ -278,6 +307,12 @@ function createNetexJourneys(
 
                 if (i === stopTimes.length - 1) {
                     spijp.node('ForBoarding').text('false');
+                }
+
+                // For now, only trip level headsigns are supported, TODO: support stop time level headsigns
+                if (i == 0 && destinationDisplaysMap[trip.trip_headsign]) {
+                    const destinationDisplayRef = spijp.node('DestinationDisplayRef');
+                    destinationDisplayRef.attr({ version: '1', ref: cs + 'DestinationDisplay:' + trip.trip_headsign });
                 }
             }
             // Store the new JourneyPattern

@@ -15,7 +15,8 @@ import {
     indexStopTimesByTripId,
     indexStopsById,
     replaceAttributeContainingString,
-    getTranslationsMap
+    getTranslationsMap,
+    addAccessibilityAssessment
 } from "./utils";
 import { createDayTypesForRoute } from "./daytypes";
 import { rootLogger } from "../utils/logger";
@@ -168,6 +169,7 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
             // Create the StopPlace if it hasn't been created yet
             stopPlace = stopPlaces.node('StopPlace').attr({ id: stopPlaceId, version: '1' });
             stopPlace.node('Name').text(mainStopToUse.stop_name);
+            addAccessibilityAssessment(stopPlace, mainStopToUse, stopCs);
 
             // Include translated names if available
             const translations = translationsMap[mainStopToUse.stop_id];

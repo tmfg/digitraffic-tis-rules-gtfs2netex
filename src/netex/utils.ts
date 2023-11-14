@@ -183,6 +183,24 @@ function replaceAttributeContainingString(xmlDoc: Document, attributeName: strin
     }
 }
 
+function addAccessibilityAssessment(stopPlace: Element, stop: Stop, cs: string) {
+    const wcb = stop.wheelchair_boarding.toString();
+    let value = 'unknown';
+    if (wcb === "1") {
+        value = 'partial';
+    } else if (wcb === "2") {
+        value = 'false';
+    }
+    const aa = stopPlace.node('AccessibilityAssessment')
+        .attr('version', '1')
+        .attr('id', cs + 'AccessibilityAssessment:' + stop.stop_id);
+    aa.node('MobilityImpairedAccess', value);
+    const limitations = aa.node('limitations');
+    const al = limitations.node('AccessibilityLimitation');
+    al.node('WheelchairAccess', value);
+    al.node('StepFreeAccess', value);
+}
+
 // Function to generate a translations map
 function getTranslationsMap(
     translations: Translation[],
@@ -242,6 +260,7 @@ export {
     getCodeSpaceForAgency,
     replaceAttributeContainingString,
     writeXmlDocToFile,
+    addAccessibilityAssessment,
     getTranslationsMap,
     findParentStop
 };

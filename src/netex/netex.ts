@@ -1,4 +1,4 @@
-import { Agency, Gtfs, Route, Stop, StopTime, Trip, FeedInfo } from "../utils/gtfs-types";
+import {Agency, Gtfs, Route, Stop, StopTime, Trip, FeedInfo, Shape} from "../utils/gtfs-types";
 import * as fs from "fs";
 import libxmljs, { Document, Element, Namespace } from "libxmljs2";
 import _ from 'lodash';
@@ -46,6 +46,7 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string): Promise<string> {
         createNetexStops(gtfs, xmlDoc, route, stopIndex);
         const dayTypes = createDayTypesForRoute(gtfs, serviceCalendarFrame, route, agency);
         createNetexJourneys(gtfs, xmlDoc, route, dayTypes, operator, line, agency, feedInfo as FeedInfo, stoptimesIndex);
+        createNetexServiceLinks(gtfs, xmlDoc, route, stoptimesIndex);
         //console.log(xmlDoc.toString());
         replaceAttributeContainingString(xmlDoc, 'id', 'perille_', 'Fintraffic_');
         replaceAttributeContainingString(xmlDoc, 'ref', 'perille_', 'Fintraffic_');
@@ -65,6 +66,7 @@ function createNetexDocumentTemplate(): Document {
     const publicationDelivery = xmlDoc
         .node('PublicationDelivery')
         .namespace('http://www.netex.org.uk/netex');
+    publicationDelivery.defineNamespace('gml', 'http://www.opengis.net/gml/3.2');
 
     const publicationTimestamp = publicationDelivery.node('PublicationTimestamp', new Date().toISOString());
     const participantRef = publicationDelivery.node('ParticipantRef', 'FSR');
@@ -80,6 +82,7 @@ function createNetexDocumentTemplate(): Document {
     const lines = serviceFrame.node('lines');
     const destinationDisplays = serviceFrame.node('destinationDisplays');
     const scheduledStopPoints = serviceFrame.node('scheduledStopPoints');
+    const serviceLinks = serviceFrame.node('serviceLinks');
     const stopAssignments = serviceFrame.node('stopAssignments');
     const journeyPatterns = serviceFrame.node('journeyPatterns');
     const serviceCalendarFrame = frames.node('ServiceCalendarFrame').attr({ id: 'ServiceCalendarFrame_1', version: '1' });
@@ -137,7 +140,7 @@ function createNetexLineFromGtfsRoute(gtfs: Gtfs, parent: Element, gtfsRoute: Ro
 
 const USE_AGENCY_CODESPACES = true; // process.env.USE_AGENCY_CODESPACES === 'true'
 
- // Create the StopPlace and ScheduleStopPoint elements
+// Create the StopPlace and ScheduleStopPoint elements
 function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIndex: { [stop_id: string]: Stop }) {
 
     const agency = findAgencyForId(gtfs, gtfsRoute.agency_id);
@@ -230,6 +233,64 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
     }
 }
 
+function createNetexServiceLinks(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stoptimesIndex: { [trip_id: string]: StopTime[] }): void {
+    const agency = findAgencyForId(gtfs, gtfsRoute.agency_id);
+    const feedInfo = gtfs.feed_info && gtfs.feed_info[0];
+    const cs = getCodeSpaceForAgency(agency, feedInfo as FeedInfo);
+    const serviceFrame = xmlDoc.get('//ServiceFrame') as Element;
+    const serviceLinks = serviceFrame.get('serviceLinks') as Element;
+
+    // Create a set to track unique shape_ids
+    const processedShapes = new Set<string>();
+    // Find trips associated with the specified route
+    const tripsForRoute: Trip[] = gtfs.trips.filter((trip) => trip.route_id === gtfsRoute.route_id);
+
+    for (const trip of tripsForRoute) {
+        const shapes = gtfs.shapes || [];
+
+        // Find the shape for the current trip
+        const shape: Shape | undefined = shapes.find((s) => s.shape_id === trip.shape_id);
+
+        if (!shape || processedShapes.has(shape.shape_id)) {
+            continue; // Skip creating duplicates
+        }
+        processedShapes.add(shape.shape_id);
+        const serviceLinkId  = cs + `ServiceLink:${shape.shape_id}`
+
+        const serviceLink = serviceLinks
+            .node('ServiceLink')
+            .attr({ version: '1', id: serviceLinkId });
+
+        const projections = serviceLink.node('projections');
+        const linkSequenceProjection = projections
+            .node('LinkSequenceProjection')
+            .attr({ version: 'any', id: cs + `LinkSequenceProjection:${shape.shape_id}` });
+
+        // Collect all coordinates associated with this shape_id
+        const coordinates: [number, number][] = shapes
+            .filter((s) => s.shape_id === shape.shape_id)
+            .map((s) => [s.shape_pt_lat, s.shape_pt_lon]);
+
+        const gmlLineString = linkSequenceProjection
+            .node('gml:LineString')
+            .attr({ srsName: 'WGS84', 'gml:id': cs.substr(0, 3) + `_LineString_${shape.shape_id}` });
+
+        for (const [lat, lon] of coordinates) {
+            gmlLineString.node('gml:pos').text(`${lat} ${lon}`);
+        }
+
+        const stopTimes = findStopTimesForTripId(stoptimesIndex, trip.trip_id);
+
+        // Create FromPointRef referencing the first stop
+        const firstStopId = _.first(stopTimes)?.stop_id;
+        serviceLink.node('FromPointRef').attr({ version: '1', ref: cs + 'ScheduledStopPoint:' + firstStopId });
+
+        // Create ToPointRef referencing the last stop
+        const lastStopId = _.last(stopTimes)?.stop_id;
+        serviceLink.node('ToPointRef').attr({ version: '1', ref: cs + 'ScheduledStopPoint:' + lastStopId });
+    }
+}
+
 function createNetexJourneys(
     gtfs: Gtfs,
     xmlDoc: Document,
@@ -317,6 +378,12 @@ function createNetexJourneys(
                     destinationDisplayRef.attr({ version: '1', ref: cs + 'DestinationDisplay:' + trip.trip_headsign });
                 }
             }
+            if (trip.shape_id) {
+                const linksInSequence = journeyPattern.node('linksInSequence');
+                const slijp = linksInSequence.node('ServiceLinkInJourneyPattern')
+                    .attr({ version: '1', id: cs + 'ServiceLinkInJourneyPattern' + ':' + trip.trip_id, order: '1' });
+                slijp.node('ServiceLinkRef').attr({ version: '1', ref: cs + 'ServiceLink' + ':' + trip.shape_id });
+            }
             // Store the new JourneyPattern
             journeyPatternsMap[key] = journeyPattern;
         }
@@ -327,8 +394,8 @@ function createNetexJourneys(
         });
         const dayType = dayTypes[trip.service_id];
 
-        // should be put  trip.trip_headsign somewhere here?
         serviceJourney.node('Name').text(gtfsRoute.route_short_name);
+        // TODO trip.wheelchair_accessible to <AccessibilityAssessment> here
         serviceJourney.node('dayTypes')
             .node('DayTypeRef').attr({ref: dayType?.attr('id')?.value() || 'UNKNOWN', version: '1'});
         serviceJourney.node('JourneyPatternRef').attr({
@@ -368,13 +435,13 @@ const xsdDoc = libxmljs.parseXmlString(xsdContent, { baseUrl: "src/netex/xsd/sch
 //process.chdir(cwd);
 
 function validateNetexDocument(xmlDoc: Document): boolean {
-  const validationResult = xmlDoc.validate(xsdDoc);
+    const validationResult = xmlDoc.validate(xsdDoc);
 
-  if (!validationResult) {
-    console.error('Validation failed:', xmlDoc.validationErrors);
-  }
+    if (!validationResult) {
+        console.error('Validation failed:', xmlDoc.validationErrors);
+    }
 
-  return validationResult;
+    return validationResult;
 }
 
 export { writeNeTEx };

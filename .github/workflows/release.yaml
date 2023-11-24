@@ -64,4 +64,4 @@ jobs:
           commit_message: Update project version to ${{ env.version_STRING }} (${{ env.VERSION_ADJUSTMENT }}) [skip ci]
           commit_user_name: Fintraffic GitHub Actions Bot
           commit_user_email: fintraffic-github-actions-bot@solita.fi
-          tagging_message: v${{ env.VERSION_STRING }}
+          tagging_message: ${{ env.VERSION_STRING }}

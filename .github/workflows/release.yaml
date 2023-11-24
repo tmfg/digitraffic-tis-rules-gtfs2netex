@@ -1,0 +1,67 @@
+name: Release new version
+
+on:
+  workflow_dispatch:
+    inputs:
+      adjustment:
+        description: 'Release increment type. Defaults to "minor", available values are "major", "minor" and "patch"'
+        required: true
+        default: 'minor'
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      # Give the default GITHUB_TOKEN write permission to commit and push the
+      # added or changed files to the repository.
+      contents: write
+
+    steps:
+      - name: Checkout project files
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 19.9.0
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+
+      - name: Show git information
+        run: |
+          git status
+          git log --no-color --graph --oneline -n 10
+          git tag --list
+
+      - name: Use provided version increment adjustment
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: echo "VERSION_ADJUSTMENT=${{ github.event.inputs.adjustment }}" >> $GITHUB_ENV
+
+      - name: Detect version increment adjustment
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        run: echo "VERSION_ADJUSTMENT=minor" >> $GITHUB_ENV
+
+      - name: Set git config
+        run: |
+          git config --global user.email fintraffic-github-actions-bot@solita.fi
+          git config --global user.name "Fintraffic GitHub Actions Bot"
+
+      - name: Generate new version
+        id: version
+        run: |
+          echo "VERSION_STRING=$(npm version ${{ env.VERSION_ADJUSTMENT }} --git-tag-version=false)" >> $GITHUB_ENV
+
+      - name: Commit version adjustments
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Update project version to ${{ env.version_STRING }} (${{ env.VERSION_ADJUSTMENT }}) [skip ci]
+          commit_user_name: Fintraffic GitHub Actions Bot
+          commit_user_email: fintraffic-github-actions-bot@solita.fi
+          tagging_message: v${{ env.VERSION_STRING }}

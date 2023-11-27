@@ -1,9 +1,7 @@
 name: "Build and push to GHCR"
 on:
-  workflow_run:
-    workflows: [ "Release new version" ]
-    types:
-      - completed
+  push:
+    tags: [ v* ]
 
 env:
   REGISTRY: ghcr.io

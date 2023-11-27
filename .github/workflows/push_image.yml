@@ -37,10 +37,15 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract CURRENT version
-        id: version
+        id: version_tag
         uses: "WyriHaximus/github-action-get-previous-tag@v1"
         with:
           prefix: v
+
+      - name: Format version tag
+        id: version
+        run: |
+          echo "version=$(echo ${{ steps.version_tag.outputs.tag }} | cut -d' ' -f2)" >> $GITHUB_OUTPUT
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -48,7 +53,7 @@ jobs:
         with:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ steps.version.outputs.tag }},enable={{is_default_branch}}
+            type=raw,value=${{ steps.version.outputs.version }},enable={{is_default_branch}}
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
       - name: Build, tag, and push image to GHCR

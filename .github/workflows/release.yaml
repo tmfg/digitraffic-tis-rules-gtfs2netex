@@ -61,7 +61,7 @@ jobs:
       - name: Commit version adjustments
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: Update project version to ${{ env.version_STRING }} (${{ env.VERSION_ADJUSTMENT }}) [skip ci]
+          commit_message: Update project version to ${{ env.VERSION_STRING }} (${{ env.VERSION_ADJUSTMENT }}) [skip ci]
           commit_user_name: Fintraffic GitHub Actions Bot
           commit_user_email: fintraffic-github-actions-bot@solita.fi
           tagging_message: ${{ env.VERSION_STRING }}

@@ -27,7 +27,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Log in to the Container registry
         uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
@@ -48,11 +48,7 @@ jobs:
         with:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ steps.previoustag.outputs.tag }},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=schedule
-            type=ref,event=branch
-            type=ref,event=tag
-            type=ref,event=pr
+            type=raw,value=${{ steps.version.outputs.tag }},enable={{is_default_branch}}
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
       - name: Build, tag, and push image to GHCR

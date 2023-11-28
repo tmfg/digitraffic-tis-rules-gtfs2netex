@@ -46,7 +46,7 @@ jobs:
       - name: Format version tag
         id: version
         run: |
-          echo "VERSION=$(echo ${{ steps.version_tag.outputs.tag }} | cut -d' ' -f2)" >> $GITHUB_ENV
+          echo "VERSION=$(echo ${{ steps.version_tag.outputs.tag }} | cut -c2-)" >> $GITHUB_ENV
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -54,8 +54,7 @@ jobs:
         with:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ env.VERSION }},enable={{is_default_branch}}
-            type=semver,pattern={{major}}.{{minor}}.{{patch}},value=${{ env.VERSION }}
+            type=semver,pattern={{major}}.{{minor}}.{{patch}},value=${{ env.VERSION }},enable={{is_default_branch}}
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
       - name: Build, tag, and push image to GHCR

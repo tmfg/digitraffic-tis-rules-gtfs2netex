@@ -54,8 +54,7 @@ jobs:
         with:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ env.VERSION }},enable={{is_default_branch}}
-            type=semver,pattern={{major}}.{{minor}}.{{patch}},value=${{ env.VERSION }}
+            type=semver,pattern={{major}}.{{minor}}.{{patch}},value=${{ env.VERSION }},enable={{is_default_branch}}
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
       - name: Build, tag, and push image to GHCR

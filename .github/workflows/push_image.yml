@@ -46,7 +46,7 @@ jobs:
       - name: Format version tag
         id: version
         run: |
-          echo "VERSION=$(echo ${{ steps.version_tag.outputs.tag }} | cut -d' ' -f2)" >> $GITHUB_ENV
+          echo "VERSION=$(echo ${{ steps.version_tag.outputs.tag }} | cut -c2-)" >> $GITHUB_ENV
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta

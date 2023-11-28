@@ -15,5 +15,6 @@ FROM node:${NODE_VERSION}-alpine
 WORKDIR /usr/src/app
 COPY --from=build /usr/src/app/node_modules ./node_modules
 COPY --from=build /usr/src/app/build ./build
+COPY package*.json ./
 
 CMD npm run convert -- --gtfs /path/to/gtfs-file.zip --netex /path/to/netex-directory

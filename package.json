@@ -12,7 +12,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "EUPL-1.2",
   "devDependencies": {
     "@types/chai": "^4.2.14",
     "@types/haversine": "^1.1.4",

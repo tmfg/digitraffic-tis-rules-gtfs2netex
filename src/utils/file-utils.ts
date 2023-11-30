@@ -6,7 +6,7 @@ import mkdirp from "mkdirp";
 import * as fs from 'fs';
 import rimraf from 'rimraf';
 import zlib from 'zlib';
-import FileType from 'file-type';
+import FileType from 'file-type'; // using v16, see https://github.com/sindresorhus/file-type/issues/535
 import {DateTime, Duration} from "ts-luxon";
 import {rootLogger} from "./logger";
 import * as path from "path";

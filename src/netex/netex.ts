@@ -1,5 +1,4 @@
 import {Agency, Gtfs, Route, Stop, StopTime, Trip, FeedInfo, Shape} from "../utils/gtfs-types";
-import * as fs from "fs";
 import libxmljs, { Document, Element, Namespace } from "libxmljs2";
 import _ from 'lodash';
 import {
@@ -20,7 +19,6 @@ import {
 } from "./utils";
 import { createDayTypesForRoute } from "./daytypes";
 import { rootLogger } from "../utils/logger";
-import path from "path";
 
 const log = rootLogger.child({src: 'netex.ts'});
 
@@ -34,7 +32,7 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string): Promise<string> {
         const agency = findAgencyForId(gtfs, route.agency_id);
         const feedInfo = gtfs.feed_info && gtfs.feed_info[0];
         const lineId = getNetexLineId(route, agency, feedInfo as FeedInfo);
-        console.log('generating netex for route ' + (i + 1) + ' of ' + gtfs.routes.length + ' : ' + lineId);
+        log.info('generating netex for route ' + (i + 1) + ' of ' + gtfs.routes.length + ' : ' + lineId);
         const xmlDoc = createNetexDocumentTemplate(false);
         const serviceFrame = xmlDoc.get('//ServiceFrame') as Element;
         const resourceFrame = xmlDoc.get('//ResourceFrame') as Element;
@@ -48,13 +46,11 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string): Promise<string> {
         const dayTypes = createDayTypesForRoute(gtfs, serviceCalendarFrame, route, agency);
         createNetexJourneys(gtfs, xmlDoc, route, dayTypes, operator, line, agency, feedInfo as FeedInfo, stoptimesIndex);
         createNetexServiceLinks(gtfs, xmlDoc, route, stoptimesIndex);
-        //console.log(xmlDoc.toString());
         replaceAttributeContainingString(xmlDoc, 'id', 'perille_', 'Fintraffic_');
         replaceAttributeContainingString(xmlDoc, 'ref', 'perille_', 'Fintraffic_');
         const fileName = _.snakeCase(lineId.replace('perille_', 'Fintraffic_')) + '.xml';
         writeXmlDocToFile(xmlDoc, filePath, fileName);
-        console.log('...done.');
-        //validateNetexDocument(xmlDoc);
+        log.info('...done.');
     }
     allStopPlaces = _.uniqBy(allStopPlaces, elem => elem.attr('id')?.value());
     const allStopsDoc = createNetexDocumentTemplate(true);
@@ -67,7 +63,7 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string): Promise<string> {
     publisherName = publisherName?.slice(0, 3).toLowerCase();
     const fileName = publisherName + '_all_stops.xml';
     writeXmlDocToFile(allStopsDoc, filePath, fileName);
-    console.log('wrote ' + allStopPlaces.length + ' stop places');
+    log.info('wrote ' + allStopPlaces.length + ' stop places');
     return '';
 }
 
@@ -190,7 +186,7 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
             // Create the StopPlace if it hasn't been created yet
             stopPlace = stopPlaces.node('StopPlace').attr({ id: stopPlaceId, version: '1' });
             stopPlace.node('Name').text(mainStopToUse.stop_name);
-            addAccessibilityAssessment(stopPlace, mainStopToUse, stopCs);
+            addAccessibilityAssessment(stopPlace, mainStopToUse.wheelchair_boarding.toString(), stopCs, 'StopPlace_' + mainStopToUse.stop_id);
 
             // Include translated names if available
             const translations = translationsMap[mainStopToUse.stop_id];
@@ -326,7 +322,6 @@ function createNetexJourneys(
     const journeyPatterns = serviceFrame.get('journeyPatterns') as Element;
     const trips = findTripsForRouteId(gtfs, gtfsRoute.route_id);
     const tripIds = trips.map(t => t.trip_id);
-    //console.log('trip ids', tripIds.join(', '));
     const journeyPatternsMap: { [key: string]: Element } = {};
     const vehicleJourneys = timetableFrame.node('vehicleJourneys');
     const destinationDisplaysMap: { [trip_headsign: string]: Element } = {};
@@ -335,7 +330,6 @@ function createNetexJourneys(
     const translationsMap: Record<string, Record<string, string>> = getTranslationsMap(gtfs.translations || [], 'trips', 'trip_headsign');
 
     for (const trip of trips) {
-        //console.log('trip id', trip.trip_id);
         const stopTimes = findStopTimesForTripId(stoptimesIndex, trip.trip_id);
         const stopIds = stopTimes.map(st => st.stop_id);
         const key = stopIds.join(',');
@@ -414,7 +408,7 @@ function createNetexJourneys(
         const dayType = dayTypes[trip.service_id];
 
         serviceJourney.node('Name').text(gtfsRoute.route_short_name);
-        // TODO trip.wheelchair_accessible to <AccessibilityAssessment> here
+        addAccessibilityAssessment(serviceJourney, trip.wheelchair_accessible.toString(), cs, 'ServiceJourney_' + trip.trip_id);
         serviceJourney.node('dayTypes')
             .node('DayTypeRef').attr({ref: dayType?.attr('id')?.value() || 'UNKNOWN', version: '1'});
         serviceJourney.node('JourneyPatternRef').attr({
@@ -447,20 +441,21 @@ function createNetexJourneys(
     }
 }
 
-const xsdContent = fs.readFileSync('./src/netex/xsd/schema/1.03/xsd/NeTEx_publication.xsd', 'utf8');
+// Validation currently not used
+//const xsdContent = fs.readFileSync('./src/netex/xsd/schema/1.03/xsd/NeTEx_publication.xsd', 'utf8');
 //const cwd = process.cwd();
 //process.chdir(path.dirname("./src/netex/xsd/schema/1.03/xsd/"));
-const xsdDoc = libxmljs.parseXmlString(xsdContent, { baseUrl: "src/netex/xsd/schema/1.03/xsd/" });
+//const xsdDoc = libxmljs.parseXmlString(xsdContent, { baseUrl: "src/netex/xsd/schema/1.03/xsd/" });
 //process.chdir(cwd);
-
-function validateNetexDocument(xmlDoc: Document): boolean {
-    const validationResult = xmlDoc.validate(xsdDoc);
-
-    if (!validationResult) {
-        console.error('Validation failed:', xmlDoc.validationErrors);
-    }
-
-    return validationResult;
-}
+//
+// function validateNetexDocument(xmlDoc: Document): boolean {
+//     const validationResult = xmlDoc.validate(xsdDoc);
+//
+//     if (!validationResult) {
+//         log.error('Validation failed:', xmlDoc.validationErrors);
+//     }
+//
+//     return validationResult;
+// }
 
 export { writeNeTEx };

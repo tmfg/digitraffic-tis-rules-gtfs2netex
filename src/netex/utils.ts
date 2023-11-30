@@ -183,17 +183,16 @@ function replaceAttributeContainingString(xmlDoc: Document, attributeName: strin
     }
 }
 
-function addAccessibilityAssessment(stopPlace: Element, stop: Stop, cs: string) {
-    const wcb = stop.wheelchair_boarding.toString();
+function addAccessibilityAssessment(parent: Element, wcb: string, cs: string, parentId: string) {
     let value = 'unknown';
     if (wcb === "1") {
         value = 'partial';
     } else if (wcb === "2") {
         value = 'false';
     }
-    const aa = stopPlace.node('AccessibilityAssessment')
+    const aa = parent.node('AccessibilityAssessment')
         .attr('version', '1')
-        .attr('id', cs + 'AccessibilityAssessment:' + stop.stop_id);
+        .attr('id', cs + 'AccessibilityAssessment:' + parentId);
     aa.node('MobilityImpairedAccess', value);
     const limitations = aa.node('limitations');
     const al = limitations.node('AccessibilityLimitation');

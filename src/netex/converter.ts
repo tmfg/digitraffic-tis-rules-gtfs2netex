@@ -5,7 +5,9 @@ import fs from 'fs';
 import path from 'path';
 import { writeNeTEx } from "./netex";
 import { readGtfs } from "../utils/read-gtfs";
+import {rootLogger} from "../utils/logger";
 
+const log = rootLogger.child({src: 'converter.ts'});
 
 async function convertGtfs(gtfsFilePath: string, netexFilePath: string): Promise<void> {
     const gtfs = await readGtfs(gtfsFilePath);
@@ -35,10 +37,10 @@ if (!gtfs || !netex) {
 
     convertGtfs(gtfsFilePath, netexDirPath)
         .then(() => {
-            console.log('Conversion completed successfully.');
+            log.info('Conversion completed successfully.');
         })
         .catch((error) => {
-            console.error('Error during conversion:', error);
+            log.error('Error during conversion: ' + error);
         });
 }
 

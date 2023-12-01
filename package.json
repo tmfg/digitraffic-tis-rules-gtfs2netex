@@ -20,7 +20,7 @@
     "@types/mocha": "^8.0.4",
     "@types/node": "^20.10.0",
     "@types/yargs": "^15.0.11",
-    "adm-zip": "0.5.1",
+    "adm-zip": "0.5.10",
     "archiver": "5.1.0",
     "axios": "1.6.2",
     "csv-parse": "4.14.1",

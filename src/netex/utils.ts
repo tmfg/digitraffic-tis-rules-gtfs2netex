@@ -4,6 +4,14 @@ import {Agent} from "http";
 import {Document, Element} from "libxmljs2";
 import * as fs from 'fs';
 
+interface Stats {
+    Lines: number,
+    StopPlaces: number,
+    Quays: number,
+    JourneyPatterns: number,
+    ServiceJourneys: number,
+}
+
 function findAgencyForId(gtfs: Gtfs, agencyId: string): Agency {
     return gtfs.agency.find((a) => a.agency_id === agencyId) as Agency;
 }
@@ -243,7 +251,21 @@ function writeXmlDocToFile(xmlDoc: Document, outputPath: string, filename: strin
     fs.writeFileSync(filePath, xmlString, {encoding: 'utf8'});
 }
 
+function writeStatsToFile(stats: Stats, outputPath: string, filename: string): void {
+    const statsString = JSON.stringify(stats, null, 2);
+    const filePath = `${outputPath}/${filename}`;
+
+    // Ensure the output directory exists
+    if (!fs.existsSync(outputPath)) {
+        fs.mkdirSync(outputPath, {recursive: true});
+    }
+
+    // Write the stats to the file
+    fs.writeFileSync(filePath, statsString, {encoding: 'utf8'});
+}
+
 export {
+    Stats,
     findAgencyForId,
     findRouteForId,
     findTripsForRouteId,
@@ -259,6 +281,7 @@ export {
     getCodeSpaceForAgency,
     replaceAttributeContainingString,
     writeXmlDocToFile,
+    writeStatsToFile,
     addAccessibilityAssessment,
     getTranslationsMap,
     findParentStop

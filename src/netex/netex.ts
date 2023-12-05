@@ -2,6 +2,7 @@ import {Agency, Gtfs, Route, Stop, StopTime, Trip, FeedInfo, Shape} from "../uti
 import libxmljs, { Document, Element, Namespace } from "libxmljs2";
 import _ from 'lodash';
 import {
+    Stats,
     findAgencyForId,
     getNetexOperatorId,
     getNetexLineId,
@@ -11,6 +12,7 @@ import {
     findStopTimesForTripId,
     getCodeSpaceForAgency,
     writeXmlDocToFile,
+    writeStatsToFile,
     indexStopTimesByTripId,
     indexStopsById,
     replaceAttributeContainingString,
@@ -26,6 +28,11 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string): Promise<string> {
     const stoptimesIndex = indexStopTimesByTripId(gtfs);
     const stopIndex = indexStopsById(gtfs);
     let allStopPlaces: Element[] = []
+
+    const stats: Stats = {} as Stats;
+    stats.JourneyPatterns = 0;
+    stats.ServiceJourneys = 0;
+    stats.Lines = gtfs.routes.length;
 
     for (let i = 0; i < gtfs.routes.length; i++) {
         const route = gtfs.routes[i];
@@ -44,7 +51,7 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string): Promise<string> {
         const line = createNetexLineFromGtfsRoute(gtfs, serviceFrame, route);
         createNetexStops(gtfs, xmlDoc, route, stopIndex, allStopPlaces);
         const dayTypes = createDayTypesForRoute(gtfs, serviceCalendarFrame, route, agency);
-        createNetexJourneys(gtfs, xmlDoc, route, dayTypes, operator, line, agency, feedInfo as FeedInfo, stoptimesIndex);
+        createNetexJourneys(gtfs, xmlDoc, route, dayTypes, operator, line, agency, feedInfo as FeedInfo, stoptimesIndex, stats);
         createNetexServiceLinks(gtfs, xmlDoc, route, stoptimesIndex);
         replaceAttributeContainingString(xmlDoc, 'id', 'perille_', 'Fintraffic_');
         replaceAttributeContainingString(xmlDoc, 'ref', 'perille_', 'Fintraffic_');
@@ -53,16 +60,20 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string): Promise<string> {
         log.info('...done.');
     }
     allStopPlaces = _.uniqBy(allStopPlaces, elem => elem.attr('id')?.value());
+    stats.StopPlaces = allStopPlaces.length;
     const allStopsDoc = createNetexDocumentTemplate(true);
     const siteFrame = allStopsDoc.get('//SiteFrame') as Element;
     const stopPlaces = siteFrame.node('stopPlaces');
     for (const stopElement of allStopPlaces) {
         stopPlaces.addChild(stopElement.clone());
     }
+    stats.Quays = allStopsDoc.find('//Quay').length;
     let publisherName = gtfs.feed_info && gtfs.feed_info[0] && gtfs.feed_info[0].feed_publisher_name;
     publisherName = publisherName?.slice(0, 3).toLowerCase();
-    const fileName = publisherName + '_all_stops.xml';
-    writeXmlDocToFile(allStopsDoc, filePath, fileName);
+    const stopsFileName = publisherName + '_all_stops.xml';
+    writeXmlDocToFile(allStopsDoc, filePath, stopsFileName);
+    const statsFileName = publisherName + '_stats.json';
+    writeStatsToFile(stats, filePath, statsFileName);
     log.info('wrote ' + allStopPlaces.length + ' stop places');
     return '';
 }
@@ -219,32 +230,31 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
         stopAssignment.attr({ order: (i + 1).toString() }); // Set the order attribute based on the index
         stopAssignment.node('ScheduledStopPointRef').attr({ ref: scheduledStopPointId, version: '1' });
 
-        if (true) {
-            let quays = stopPlace.get('quays') as Element;
-            if (!quays) {
-                quays = stopPlace.node('quays');
-            }
-            const quayId = stopCs + 'Quay' + ':' + stop.stop_id;
-            const quay = quays.node('Quay').attr({ id: quayId, version: '1' });
-
-            if (!_.isEmpty(stop.stop_digiroad_id)) {
-                const keyList = quay.node('keyList');
-                keyList.node('KeyValue')
-                    .node('Key').text('digiroad_id').parent()
-                    .node('Value').text(stop.stop_digiroad_id);
-            }
-            if (!_.isEmpty(stop.stop_name)) {
-                quay.node('Name').text(stop.stop_name);
-            }
-            quay.node('Centroid').node('Location')
-                .node('Longitude').text(stop.stop_lon.toString()).parent()
-                .node('Latitude').text(stop.stop_lat.toString()).parent();
-
-            if (!_.isEmpty(stop.stop_code)) {
-                quay.node('PublicCode').text(stop.stop_code);
-            }
-            stopAssignment.node('QuayRef').attr({ ref: quayId, version: '1' });
+        // Create the Quay element
+        let quays = stopPlace.get('quays') as Element;
+        if (!quays) {
+            quays = stopPlace.node('quays');
         }
+        const quayId = stopCs + 'Quay' + ':' + stop.stop_id;
+        const quay = quays.node('Quay').attr({ id: quayId, version: '1' });
+
+        if (!_.isEmpty(stop.stop_digiroad_id)) {
+            const keyList = quay.node('keyList');
+            keyList.node('KeyValue')
+                .node('Key').text('digiroad_id').parent()
+                .node('Value').text(stop.stop_digiroad_id);
+        }
+        if (!_.isEmpty(stop.stop_name)) {
+            quay.node('Name').text(stop.stop_name);
+        }
+        quay.node('Centroid').node('Location')
+            .node('Longitude').text(stop.stop_lon.toString()).parent()
+            .node('Latitude').text(stop.stop_lat.toString()).parent();
+
+        if (!_.isEmpty(stop.stop_code)) {
+            quay.node('PublicCode').text(stop.stop_code);
+        }
+        stopAssignment.node('QuayRef').attr({ ref: quayId, version: '1' });
     }
 }
 
@@ -315,7 +325,8 @@ function createNetexJourneys(
     line: Element,
     agency: Agency,
     feedInfo: FeedInfo,
-    stoptimesIndex: { [trip_id: string]: StopTime[] }
+    stoptimesIndex: { [trip_id: string]: StopTime[] },
+    stats: Stats,
 ) {
     const timetableFrame = xmlDoc.get('//TimetableFrame') as Element;
     const serviceFrame = xmlDoc.get('//ServiceFrame') as Element;
@@ -329,6 +340,7 @@ function createNetexJourneys(
     const cs = getCodeSpaceForAgency(agency, feedInfo);
     const translationsMap: Record<string, Record<string, string>> = getTranslationsMap(gtfs.translations || [], 'trips', 'trip_headsign');
 
+    stats.ServiceJourneys += trips.length;
     for (const trip of trips) {
         const stopTimes = findStopTimesForTripId(stoptimesIndex, trip.trip_id);
         const stopIds = stopTimes.map(st => st.stop_id);
@@ -399,6 +411,7 @@ function createNetexJourneys(
             }
             // Store the new JourneyPattern
             journeyPatternsMap[key] = journeyPattern;
+            stats.JourneyPatterns++;
         }
 
         const serviceJourney = vehicleJourneys.node('ServiceJourney').attr({

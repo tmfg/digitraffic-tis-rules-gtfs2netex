@@ -17,7 +17,8 @@ import {
     indexStopsById,
     replaceAttributeContainingString,
     getTranslationsMap,
-    addAccessibilityAssessment
+    addAccessibilityAssessment,
+    getStopPlaceType
 } from "./utils";
 import { createDayTypesForRoute } from "./daytypes";
 import { rootLogger } from "../utils/logger";
@@ -138,7 +139,6 @@ function createNetexLineFromGtfsRoute(gtfs: Gtfs, parent: Element, gtfsRoute: Ro
     const lineElement = lines.node('Line').attr({ id: getNetexLineId(gtfsRoute, agency, feedInfo as FeedInfo), version: '1' });
 
     // Set the required attributes and elements for the Line element using GTFS route properties
-
     if (!_.isEmpty(gtfsRoute.route_long_name)) {
         // Check if there are translations for this route name
         if (lineNameTranslationsMap[gtfsRoute.route_id]) {
@@ -215,6 +215,10 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
                 }
             }
             stopPlace.node('TransportMode').text(getTransportMode(gtfsRoute.route_type));
+            const stopPlaceType = getStopPlaceType(gtfsRoute.route_type);
+            if (!_.isEmpty(stopPlaceType)) {
+                stopPlace.node('StopPlaceType').text(stopPlaceType);
+            }
 
             // Store the created StopPlace in the map
             stopPlacesMap[stopPlaceId] = stopPlace;
@@ -435,7 +439,11 @@ function createNetexJourneys(
         for (let i = 0; i < stopTimes.length; i++) {
             const tpt = passingTimes.node('TimetabledPassingTime').attr({ version: '1' });
             const stopTime = stopTimes[i];
-            const stopPointId = cs + 'StopPointInJourneyPattern' + ':' + stopTime.stop_id + ':' + i;
+
+            // Assuming the journeyPattern element's ID is in the format "cs + 'JourneyPattern' + ':' + trip.trip_id"
+            const tripIdFromJourneyPattern = _.last(journeyPattern.attr('id')?.value().split(':')); // Extracting trip ID
+            const stopPointId = cs + 'StopPointInJourneyPattern' + ':' + tripIdFromJourneyPattern + ':' + stopTime.stop_id + ':' + i;
+
             tpt.node('StopPointInJourneyPatternRef').attr({ ref: stopPointId, version: '1' });
 
             const departureTime = stopTime.departure_time;

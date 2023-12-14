@@ -1,8 +1,10 @@
 import _ from "lodash";
 import {Agency, Calendar, CalendarDate, Gtfs, Route, Stop, StopTime, Trip, FeedInfo, Translation} from "../utils/gtfs-types";
-import {Agent} from "http";
 import {Document, Element} from "libxmljs2";
 import * as fs from 'fs';
+import { rootLogger } from "../utils/logger";
+
+const log = rootLogger.child({src: 'utils.ts'});
 
 interface Stats {
     Lines: number,
@@ -126,8 +128,35 @@ function getTransportMode(gtfsRouteType: number): string {
     if (mode) {
         return mode;
     }
-    console.warn('Unknown GTFS route type: ' + gtfsRouteType);
+    log.warn('Unknown GTFS route type: ' + gtfsRouteType);
     return 'other';
+}
+
+function getStopPlaceType(gtfsRouteType: number): string {
+    const mode = getTransportMode(gtfsRouteType);
+    if (mode === 'tram') {
+        return 'onstreetTram';
+    }
+    if (mode === 'metro') {
+        return 'metroStation';
+    }
+    if (mode === 'rail') {
+        return 'railStation';
+    }
+    if (mode === 'bus') {
+        return 'onstreetBus';
+    }
+    if (mode === 'water') {
+        return 'harbourPort';
+    }
+    if (mode === 'cablecar' || mode === 'gondola' || mode === 'funicular') {
+        return 'liftStation';
+    }
+    if (mode === 'air') {
+        return 'airport';
+    }
+    log.warn('Unknown GTFS route type: ' + gtfsRouteType);
+    return '';
 }
 
 const CODESPACE_FROM_FEEDINFO = true; //process.env.CODESPACE_FROM_FEEDINFO === 'true';
@@ -276,6 +305,7 @@ export {
     getNetexLineId,
     getNetexOperatorId,
     getTransportMode,
+    getStopPlaceType,
     findCalendarsForTrips,
     findCalendarDatesForTrips,
     getCodeSpaceForAgency,

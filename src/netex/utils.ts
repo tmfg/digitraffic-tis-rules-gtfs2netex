@@ -293,6 +293,52 @@ function writeStatsToFile(stats: Stats, outputPath: string, filename: string): v
     fs.writeFileSync(filePath, statsString, {encoding: 'utf8'});
 }
 
+function createDestinationDisplayForTrip(destinationDisplays: Element, cs: string, trip: Trip, translationsMap: Record<string, Record<string, string>>) {
+    const destinationDisplay = destinationDisplays
+        .node('DestinationDisplay')
+        .attr({version: '1', id: cs + 'DestinationDisplay:' + trip.trip_headsign});
+
+    // Include translated headsign if available
+    const translations = translationsMap[trip.trip_id];
+    if (translations) {
+        const alternativeTexts = destinationDisplay.node('alternativeTexts');
+        for (const language in translationsMap[trip.trip_id]) {
+            const translatedName = translationsMap[trip.trip_id][language];
+            const alternativeText = alternativeTexts.node('AlternativeText');
+            alternativeText.attr({attributeName: 'FrontText'});
+            const text = alternativeText.node('Text');
+            text.attr({lang: language});
+            text.text(translatedName);
+        }
+    }
+
+    destinationDisplay.node('FrontText').text(trip.trip_headsign);
+    return destinationDisplay;
+}
+
+function createDestinationDisplayForStopTime(destinationDisplays: Element, cs: string, stopTime: StopTime, translationsMap: Record<string, Record<string, string>>) {
+    const destinationDisplay = destinationDisplays
+        .node('DestinationDisplay')
+        .attr({version: '1', id: cs + 'DestinationDisplay:' + stopTime.stop_headsign});
+
+    // Include translated headsign if available
+    const translations = translationsMap[stopTime.trip_id];
+    if (translations) {
+        const alternativeTexts = destinationDisplay.node('alternativeTexts');
+        for (const language in translationsMap[stopTime.trip_id]) {
+            const translatedName = translationsMap[stopTime.trip_id][language];
+            const alternativeText = alternativeTexts.node('AlternativeText');
+            alternativeText.attr({attributeName: 'FrontText'});
+            const text = alternativeText.node('Text');
+            text.attr({lang: language});
+            text.text(translatedName);
+        }
+    }
+
+    destinationDisplay.node('FrontText').text(stopTime.stop_headsign);
+    return destinationDisplay;
+}
+
 export {
     Stats,
     findAgencyForId,
@@ -314,5 +360,7 @@ export {
     writeStatsToFile,
     addAccessibilityAssessment,
     getTranslationsMap,
-    findParentStop
+    findParentStop,
+    createDestinationDisplayForTrip,
+    createDestinationDisplayForStopTime
 };

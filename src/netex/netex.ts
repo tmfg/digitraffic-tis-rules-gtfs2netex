@@ -18,7 +18,9 @@ import {
     replaceAttributeContainingString,
     getTranslationsMap,
     addAccessibilityAssessment,
-    getStopPlaceType
+    getStopPlaceType,
+    createDestinationDisplayForTrip,
+    createDestinationDisplayForStopTime
 } from "./utils";
 import { createDayTypesForRoute } from "./daytypes";
 import { rootLogger } from "../utils/logger";
@@ -44,9 +46,7 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string): Promise<string> {
         const xmlDoc = createNetexDocumentTemplate(false);
         const serviceFrame = xmlDoc.get('//ServiceFrame') as Element;
         const resourceFrame = xmlDoc.get('//ResourceFrame') as Element;
-        const siteFrame = xmlDoc.get('//SiteFrame') as Element;
         const serviceCalendarFrame = xmlDoc.get('//ServiceCalendarFrame') as Element;
-        const timetableFrame = xmlDoc.get('//TimetableFrame') as Element;
         const organisations = resourceFrame.get('organisations') as Element;
         const operator = createNetexOperatorFromGtfsRoute(gtfs, organisations, route);
         const line = createNetexLineFromGtfsRoute(gtfs, serviceFrame, route);
@@ -342,7 +342,10 @@ function createNetexJourneys(
     const destinationDisplaysMap: { [trip_headsign: string]: Element } = {};
     const destinationDisplays = serviceFrame.get('destinationDisplays') as Element;
     const cs = getCodeSpaceForAgency(agency, feedInfo);
-    const translationsMap: Record<string, Record<string, string>> = getTranslationsMap(gtfs.translations || [], 'trips', 'trip_headsign');
+
+    // TODO these could be optimized a bit by precreating these maps as passing them in as arguments
+    const tripHeadsignTranslationsMap: Record<string, Record<string, string>> = getTranslationsMap(gtfs.translations || [], 'trips', 'trip_headsign');
+    const stopTimesHeadsignTranslationsMap: Record<string, Record<string, string>> = getTranslationsMap(gtfs.translations || [], 'stop_times', 'stop_headsign');
 
     stats.ServiceJourneys += trips.length;
     for (const trip of trips) {
@@ -353,26 +356,7 @@ function createNetexJourneys(
 
         // Create a DestinationDisplay element if it doesn't exist for this trip_headsign
         if (trip.trip_headsign && !destinationDisplaysMap[trip.trip_headsign]) {
-            const destinationDisplay = destinationDisplays
-                .node('DestinationDisplay')
-                .attr({ version: '1', id: cs + 'DestinationDisplay:' + trip.trip_headsign });
-
-            // Include translated headsign if available
-            const translations = translationsMap[trip.trip_id];
-            if (translations) {
-                const alternativeTexts = destinationDisplay.node('alternativeTexts');
-                for (const language in translationsMap[trip.trip_id]) {
-                    const translatedName = translationsMap[trip.trip_id][language];
-                    const alternativeText = alternativeTexts.node('AlternativeText');
-                    alternativeText.attr({ attributeName: 'FrontText'});
-                    const text = alternativeText.node('Text');
-                    text.attr({ lang: language });
-                    text.text(translatedName);
-                }
-            }
-
-            destinationDisplay.node('FrontText').text(trip.trip_headsign);
-            destinationDisplaysMap[trip.trip_headsign] = destinationDisplay;
+            destinationDisplaysMap[trip.trip_headsign] = createDestinationDisplayForTrip(destinationDisplays, cs, trip, tripHeadsignTranslationsMap);
         }
 
         // Check if a JourneyPattern with the same sequence of stops already exists
@@ -382,6 +366,7 @@ function createNetexJourneys(
                 .attr({id: cs + 'JourneyPattern' + ':' + trip.trip_id, version: '1'});
             const pis = journeyPattern.node('pointsInSequence');
 
+            let previousHeadsign = '';
             for (let i = 0; i < stopTimes.length; i++) {
                 const stopTime = stopTimes[i];
                 const stopPointId = cs + 'StopPointInJourneyPattern' + ':' + trip.trip_id + ':' + stopTime.stop_id + ':' + i;
@@ -401,10 +386,18 @@ function createNetexJourneys(
                     spijp.node('ForBoarding').text('false');
                 }
 
-                // For now, only trip level headsigns are supported, TODO: support stop time level headsigns
-                if (i == 0 && destinationDisplaysMap[trip.trip_headsign]) {
+                // Create a DestinationDisplayRef if it doesn't exist for this stop_headsign
+                if (stopTime.stop_headsign && !destinationDisplaysMap[stopTime.stop_headsign]) {
+                    destinationDisplaysMap[stopTime.stop_headsign] = createDestinationDisplayForStopTime(destinationDisplays, cs, stopTime, stopTimesHeadsignTranslationsMap);
+                }
+
+                let headsign = stopTime.stop_headsign || trip.trip_headsign;
+
+                // Either first stop or headsign changed
+                if (headsign && (i === 0 || headsign !== previousHeadsign)) {
                     const destinationDisplayRef = spijp.node('DestinationDisplayRef');
-                    destinationDisplayRef.attr({ version: '1', ref: cs + 'DestinationDisplay:' + trip.trip_headsign });
+                    destinationDisplayRef.attr({ version: '1', ref: cs + 'DestinationDisplay:' + headsign });
+                    previousHeadsign = headsign;
                 }
             }
             if (trip.shape_id) {

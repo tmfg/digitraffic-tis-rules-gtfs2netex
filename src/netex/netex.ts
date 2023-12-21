@@ -439,17 +439,33 @@ function createNetexJourneys(
 
             tpt.node('StopPointInJourneyPatternRef').attr({ ref: stopPointId, version: '1' });
 
+            const arrivalTime = stopTime.arrival_time;
             const departureTime = stopTime.departure_time;
-            const [hours, minutes, seconds] = departureTime.split(':').map(Number);
 
-            if (hours > 23 || (hours === 23 && (minutes > 59 || seconds > 59))) {
-                // Departure time exceeds 23:59:59, calculate the day offset
-                const dayOffset = Math.floor(hours / 24);
-                const formattedTime = `${(hours % 24).toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-                tpt.node('DepartureTime').text(formattedTime);
-                tpt.node('DepartureDayOffset').text(dayOffset.toString());
-            } else {
-                tpt.node('DepartureTime').text(departureTime);
+            if (arrivalTime) {
+                const [arrHours, arrMinutes, arrSeconds] = arrivalTime.split(':').map(Number);
+                if (arrHours > 23 || (arrHours === 23 && (arrMinutes > 59 || arrSeconds > 59))) {
+                    // Arrival time exceeds 23:59:59, calculate the day offset
+                    const arrDayOffset = Math.floor(arrHours / 24);
+                    const formattedArrTime = `${(arrHours % 24).toString().padStart(2, '0')}:${arrMinutes.toString().padStart(2, '0')}:${arrSeconds.toString().padStart(2, '0')}`;
+                    tpt.node('ArrivalTime').text(formattedArrTime);
+                    tpt.node('ArrivalDayOffset').text(arrDayOffset.toString());
+                } else {
+                    tpt.node('ArrivalTime').text(arrivalTime);
+                }
+            }
+
+            if (departureTime) {
+                const [depHours, depMinutes, depSeconds] = departureTime.split(':').map(Number);
+                if (depHours > 23 || (depHours === 23 && (depMinutes > 59 || depSeconds > 59))) {
+                    // Departure time exceeds 23:59:59, calculate the day offset
+                    const depDayOffset = Math.floor(depHours / 24);
+                    const formattedDepTime = `${(depHours % 24).toString().padStart(2, '0')}:${depMinutes.toString().padStart(2, '0')}:${depSeconds.toString().padStart(2, '0')}`;
+                    tpt.node('DepartureTime').text(formattedDepTime);
+                    tpt.node('DepartureDayOffset').text(depDayOffset.toString());
+                } else {
+                    tpt.node('DepartureTime').text(departureTime);
+                }
             }
         }
     }

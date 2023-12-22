@@ -2,7 +2,7 @@ import _ from 'lodash';
 import archiver from 'archiver';
 import {existsSync, readdir} from "fs";
 import {resolve} from 'path';
-import mkdirp from "mkdirp";
+import {mkdirp} from 'mkdirp';
 import * as fs from 'fs';
 import rimraf from 'rimraf';
 import zlib from 'zlib';

@@ -28,7 +28,7 @@
     "eslint-config-prettier": "^6.10.0",
     "eslint-plugin-prettier": "^3.1.2",
     "file-type": "16.5.4",
-    "htmlparser2": "5.0.1",
+    "htmlparser2": "9.0.0",
     "lodash": "^4.17.21",
     "mkdirp": "3.0.1",
     "mocha": "^10.2.0",

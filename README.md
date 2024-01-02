@@ -13,5 +13,5 @@ npm run convert -- --gtfs /path/to/gtfs-file.zip --netex /path/to/netex-director
 ```
 
 
-Copyright Fintraffic 2023. Licensed under the EUPL-1.2 or later.
+Copyright Fintraffic 2023-2024. Licensed under the EUPL-1.2 or later.
 

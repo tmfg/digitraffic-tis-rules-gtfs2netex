@@ -1,6 +1,6 @@
 {
   "name": "gtfs2netex",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "GTFS to Nordic NeTEx converter",
   "main": "converter.js",
   "engines": {

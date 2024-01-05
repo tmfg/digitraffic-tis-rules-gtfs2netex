@@ -46,12 +46,16 @@ function createDayTypesForRoute(
             }
         }
     }
+
+    // Create DayType elements for each service_id
     let orderCounter = 1;
     for (const service_id of service_ids) {
         const dayTypeId = cs + 'DayType:' + service_id;
         const dayType = dayTypes.node('DayType').attr({ id: dayTypeId, version: '1' });
 
         const calendar = calendars.find(c => c.service_id === service_id);
+
+        // If there is a calendar, use it to set the days of the week
         if (calendar) {
             dayType.node('properties').node('PropertyOfDay').node('DaysOfWeek', calendarDaysToString(calendar));
 

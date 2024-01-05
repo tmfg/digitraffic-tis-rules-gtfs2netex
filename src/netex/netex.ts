@@ -100,7 +100,11 @@ function createNetexDocumentTemplate(stopsOnly: boolean): Document {
 
     // Create the CompositeFrame element and its relevant child elements in correct order
     const compositeFrame = dataObjects.node('CompositeFrame').attr({ id: 'CompositeFrame_1', version: '1' });
+    const frameDefaults = compositeFrame.node('FrameDefaults');
+    const defaultLocale = frameDefaults.node('DefaultLocale').node('DefaultLanguage', 'fi')
+    const defaultLocationSystem = frameDefaults.node('DefaultLocationSystem', 'WGS84');
     const frames = compositeFrame.node('frames');
+
     const resourceFrame = frames.node('ResourceFrame').attr({ id: 'ResourceFrame_1', version: '1' });
     const organisations = resourceFrame.node('organisations');
     const siteFrame = frames.node('SiteFrame').attr({ id: 'SiteFrame_1', version: '1' });
@@ -258,6 +262,7 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
         if (!_.isEmpty(stop.stop_code)) {
             quay.node('PublicCode').text(stop.stop_code);
         }
+        stopAssignment.node('StopPlaceRef').attr({ ref: stopPlaceId, version: '1' });
         stopAssignment.node('QuayRef').attr({ ref: quayId, version: '1' });
     }
 }

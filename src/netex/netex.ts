@@ -201,7 +201,7 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
             // Create the StopPlace if it hasn't been created yet
             stopPlace = stopPlaces.node('StopPlace').attr({ id: stopPlaceId, version: '1' });
             stopPlace.node('Name').text(mainStopToUse.stop_name);
-            addAccessibilityAssessment(stopPlace, mainStopToUse.wheelchair_boarding.toString(), stopCs, 'StopPlace_' + mainStopToUse.stop_id);
+            addAccessibilityAssessment(stopPlace, mainStopToUse.wheelchair_boarding?.toString(), stopCs, 'StopPlace_' + mainStopToUse.stop_id);
 
             // Include translated names if available
             const translations = translationsMap[mainStopToUse.stop_id];
@@ -423,7 +423,7 @@ function createNetexJourneys(
         const dayType = dayTypes[trip.service_id];
 
         serviceJourney.node('Name').text(gtfsRoute.route_short_name);
-        addAccessibilityAssessment(serviceJourney, trip.wheelchair_accessible.toString(), cs, 'ServiceJourney_' + trip.trip_id);
+        addAccessibilityAssessment(serviceJourney, trip.wheelchair_accessible?.toString(), cs, 'ServiceJourney_' + trip.trip_id);
         serviceJourney.node('dayTypes')
             .node('DayTypeRef').attr({ref: dayType?.attr('id')?.value() || 'UNKNOWN', version: '1'});
         serviceJourney.node('JourneyPatternRef').attr({

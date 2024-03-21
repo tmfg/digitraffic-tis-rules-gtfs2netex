@@ -70,7 +70,7 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string): Promise<string> {
     }
     stats.Quays = allStopsDoc.find('//Quay').length;
     let publisherName = gtfs.feed_info && gtfs.feed_info[0] && gtfs.feed_info[0].feed_publisher_name;
-    publisherName = publisherName?.slice(0, 3).toLowerCase();
+    publisherName = publisherName?.slice(0, 3).toLowerCase() || 'oth';
     const stopsFileName = publisherName + '_all_stops.xml';
     writeXmlDocToFile(allStopsDoc, filePath, stopsFileName);
     const statsFileName = publisherName + '_stats.json';

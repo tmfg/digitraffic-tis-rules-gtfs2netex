@@ -15,6 +15,9 @@ interface Stats {
 }
 
 function findAgencyForId(gtfs: Gtfs, agencyId: string): Agency {
+    if (gtfs.agency.length === 1) {
+        return gtfs.agency[0]; // trivial case, only one agency, and in that case agencyId is optional
+    }
     return gtfs.agency.find((a) => a.agency_id === agencyId) as Agency;
 }
 

@@ -94,7 +94,10 @@ function createNetexDocumentTemplate(stopsOnly: boolean): Document {
     const dataObjects = publicationDelivery.node('dataObjects');
 
     if (stopsOnly) {
-        dataObjects.node('SiteFrame').attr({ id: 'SiteFrame_1', version: '1' });
+        const siteFrame = dataObjects.node('SiteFrame').attr({ id: 'SiteFrame_1', version: '1' });
+        const frameDefaults = siteFrame.node('FrameDefaults');
+        frameDefaults.node('DefaultLocale').node('DefaultLanguage', 'fi')
+        frameDefaults.node('DefaultLocationSystem', 'WGS84');
         return xmlDoc;
     }
 
@@ -456,7 +459,8 @@ function createNetexJourneys(
                     tpt.node('ArrivalTime').text(formattedArrTime);
                     tpt.node('ArrivalDayOffset').text(arrDayOffset.toString());
                 } else {
-                    tpt.node('ArrivalTime').text(arrivalTime);
+                    const formattedArrivalTime = `${arrHours.toString().padStart(2, '0')}:${arrMinutes.toString().padStart(2, '0')}:${arrSeconds.toString().padStart(2, '0')}`;
+                    tpt.node('ArrivalTime').text(formattedArrivalTime);
                 }
             }
 
@@ -469,7 +473,8 @@ function createNetexJourneys(
                     tpt.node('DepartureTime').text(formattedDepTime);
                     tpt.node('DepartureDayOffset').text(depDayOffset.toString());
                 } else {
-                    tpt.node('DepartureTime').text(departureTime);
+                    const formattedDepartureTime = `${depHours.toString().padStart(2, '0')}:${depMinutes.toString().padStart(2, '0')}:${depSeconds.toString().padStart(2, '0')}`;
+                    tpt.node('DepartureTime').text(formattedDepartureTime);
                 }
             }
         }

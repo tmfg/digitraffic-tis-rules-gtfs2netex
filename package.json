@@ -37,7 +37,7 @@
     "rimraf": "^3.0.0",
     "ts-node": "^8.3.0",
     "typescript": "^5.2.2",
-    "winston": "^3.8.2"
+    "winston": "^3.13.0"
   },
   "dependencies": {
     "@types/adm-zip": "^0.4.33",

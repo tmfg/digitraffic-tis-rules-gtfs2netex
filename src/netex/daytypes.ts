@@ -92,6 +92,15 @@ function createDayTypesForRoute(
         }
         dayTypeElements[service_id] = dayType;
     }
+
+   // remove possibly empty container elements as not allowed by schema
+    if (operatingDays.childNodes().length === 0) {
+        operatingDays.remove();
+    }
+
+    if (operatingPeriods.childNodes().length === 0) {
+        operatingPeriods.remove();
+    }
     return dayTypeElements;
 }
 

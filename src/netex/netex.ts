@@ -70,7 +70,7 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string): Promise<string> {
     }
     stats.Quays = allStopsDoc.find('//Quay').length;
     let publisherName = gtfs.feed_info && gtfs.feed_info[0] && gtfs.feed_info[0].feed_publisher_name;
-    publisherName = publisherName?.slice(0, 3).toLowerCase() || 'oth';
+    publisherName = publisherName? _.camelCase(publisherName).slice(0, 3).toLowerCase() : 'oth';
     const stopsFileName = publisherName + '_all_stops.xml';
     writeXmlDocToFile(allStopsDoc, filePath, stopsFileName);
     const statsFileName = publisherName + '_stats.json';
@@ -325,6 +325,11 @@ function createNetexServiceLinks(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route,
         // Create ToPointRef referencing the last stop
         const lastStopId = _.last(stopTimes)?.stop_id;
         serviceLink.node('ToPointRef').attr({ version: '1', ref: cs + 'ScheduledStopPoint:' + lastStopId });
+    }
+
+    // remove possibly empty container element as not allowed by schema
+    if (serviceLinks.childNodes().length === 0) {
+        serviceLinks.remove();
     }
 }
 

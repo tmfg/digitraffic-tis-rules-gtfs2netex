@@ -168,7 +168,7 @@ function getCodeSpaceForAgency(gtfsAgency: Agency, feedInfo: FeedInfo): string {
     if (CODESPACE_FROM_FEEDINFO) {
         // Use the first 3 letters of feed_publisher_name as codespace
         const publisherName = feedInfo?.feed_publisher_name || 'OTH';
-        return publisherName.slice(0, 3).toUpperCase() + ':';
+        return _.camelCase(publisherName).slice(0, 3).toUpperCase() + ':';
     }
     let cs = getCodeSpaceForAgencyByUrl(gtfsAgency.agency_fare_url);
     if (_.isEmpty(cs)) {

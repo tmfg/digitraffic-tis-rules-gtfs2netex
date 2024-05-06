@@ -60,14 +60,13 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string): Promise<string> {
         writeXmlDocToFile(xmlDoc, filePath, fileName);
         log.info('...done.');
     }
+
+    // Write all stops to a separate file
+    allStopPlaces = [];
+    const allStopsDoc = createNetexDocumentTemplate(true);
+    createNetexStops(gtfs, allStopsDoc, gtfs.routes[0], stopIndex, allStopPlaces, true);
     allStopPlaces = _.uniqBy(allStopPlaces, elem => elem.attr('id')?.value());
     stats.StopPlaces = allStopPlaces.length;
-    const allStopsDoc = createNetexDocumentTemplate(true);
-    const siteFrame = allStopsDoc.get('//SiteFrame') as Element;
-    const stopPlaces = siteFrame.node('stopPlaces');
-    for (const stopElement of allStopPlaces) {
-        stopPlaces.addChild(stopElement.clone());
-    }
     stats.Quays = allStopsDoc.find('//Quay').length;
     let publisherName = gtfs.feed_info && gtfs.feed_info[0] && gtfs.feed_info[0].feed_publisher_name;
     publisherName = publisherName? _.camelCase(publisherName).slice(0, 3).toLowerCase() : 'oth';
@@ -173,19 +172,28 @@ function createNetexLineFromGtfsRoute(gtfs: Gtfs, parent: Element, gtfsRoute: Ro
 const USE_AGENCY_CODESPACES = true; // process.env.USE_AGENCY_CODESPACES === 'true'
 
 // Create the StopPlace and ScheduleStopPoint elements
-function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIndex: { [p: string]: Stop }, allStopPlaces: Element[]) {
+function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIndex: { [p: string]: Stop }, allStopPlaces: Element[], allStopsOnly = false): void {
 
     const agency = findAgencyForId(gtfs, gtfsRoute.agency_id);
     const feedInfo = gtfs.feed_info && gtfs.feed_info[0];
     const cs = getCodeSpaceForAgency(agency, feedInfo as FeedInfo);
     const stopCs = USE_AGENCY_CODESPACES? cs: 'FSR:';
     const siteFrame = xmlDoc.get('//SiteFrame') as Element;
-    const serviceFrame = xmlDoc.get('//ServiceFrame') as Element;
     const stopPlaces = siteFrame.node('stopPlaces');
-    const scheduledStopPoints = serviceFrame.get('scheduledStopPoints') as Element;
-    const stopAssignments = serviceFrame.get('stopAssignments') as Element;
-    const trips = findTripsForRouteId(gtfs, gtfsRoute.route_id);
-    const stops = findStopsForTrips(gtfs, stopIndex, trips);
+
+    let serviceFrame, scheduledStopPoints, stopAssignments;
+    let trips : Trip[] = [];
+    let stops: Stop[] = [];
+    if (allStopsOnly) {
+        stops = gtfs.stops;
+    } else {
+        serviceFrame = xmlDoc.get('//ServiceFrame') as Element;
+        scheduledStopPoints = serviceFrame.get('scheduledStopPoints') as Element;
+        stopAssignments = serviceFrame.get('stopAssignments') as Element;
+        trips = findTripsForRouteId(gtfs, gtfsRoute.route_id);
+        stops = findStopsForTrips(gtfs, stopIndex, trips);
+    }
+
     const transportMode = getTransportMode(gtfsRoute.route_type);
     const stopPlacesMap: { [stopPlaceId: string]: Element } = {};
     const translationsMap: Record<string, Record<string, string>> = getTranslationsMap(gtfs.translations || [], 'stops', 'stop_name');
@@ -232,15 +240,6 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
             allStopPlaces.push(stopPlace);
         }
 
-        const scheduledStopPointId = cs + 'ScheduledStopPoint' + ':' + stop.stop_id;
-        const scheduledStopPoint = scheduledStopPoints.node('ScheduledStopPoint').attr({ id: scheduledStopPointId, version: '1' });
-        scheduledStopPoint.node('Name').text(stop.stop_name);
-
-        const stopAssignment = stopAssignments.node('PassengerStopAssignment')
-            .attr({ id: cs + 'StopAssignment' + ':' + stop.stop_id, version: '1' });
-        stopAssignment.attr({ order: (i + 1).toString() }); // Set the order attribute based on the index
-        stopAssignment.node('ScheduledStopPointRef').attr({ ref: scheduledStopPointId, version: '1' });
-
         // Create the Quay element
         let quays = stopPlace.get('quays') as Element;
         if (!quays) {
@@ -265,8 +264,22 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
         if (!_.isEmpty(stop.stop_code)) {
             quay.node('PublicCode').text(stop.stop_code);
         }
-        stopAssignment.node('StopPlaceRef').attr({ ref: stopPlaceId, version: '1' });
-        stopAssignment.node('QuayRef').attr({ ref: quayId, version: '1' });
+
+        if (!allStopsOnly && stopAssignments && scheduledStopPoints) {
+            const scheduledStopPointId = cs + 'ScheduledStopPoint' + ':' + stop.stop_id;
+            const scheduledStopPoint = scheduledStopPoints.node('ScheduledStopPoint').attr({
+                id: scheduledStopPointId,
+                version: '1'
+            });
+            scheduledStopPoint.node('Name').text(stop.stop_name);
+
+            const stopAssignment = stopAssignments.node('PassengerStopAssignment')
+                .attr({id: cs + 'StopAssignment' + ':' + stop.stop_id, version: '1'});
+            stopAssignment.attr({order: (i + 1).toString()}); // Set the order attribute based on the index
+            stopAssignment.node('ScheduledStopPointRef').attr({ref: scheduledStopPointId, version: '1'});
+            stopAssignment.node('StopPlaceRef').attr({ref: stopPlaceId, version: '1'});
+            stopAssignment.node('QuayRef').attr({ref: quayId, version: '1'});
+        }
     }
 }
 

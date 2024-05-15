@@ -497,6 +497,11 @@ function createNetexJourneys(
             }
         }
     }
+
+    // remove possibly empty container element as not allowed by schema
+    if (destinationDisplays.childNodes().length === 0) {
+        destinationDisplays.remove();
+    }
 }
 
 // Validation currently not used

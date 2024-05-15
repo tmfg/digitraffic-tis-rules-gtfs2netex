@@ -134,6 +134,7 @@ function createNetexLineFromGtfsRoute(gtfs: Gtfs, parent: Element, gtfsRoute: Ro
     const agency = findAgencyForId(gtfs, gtfsRoute.agency_id);
     const lines = parent.get('lines') as Element;
     const feedInfo = gtfs.feed_info && gtfs.feed_info[0];
+    const cs = getCodeSpaceForAgency(agency, feedInfo as FeedInfo);
 
     const lineNameTranslationsMap: Record<string, Record<string, string>> = getTranslationsMap(
         gtfs.translations || [],
@@ -152,6 +153,8 @@ function createNetexLineFromGtfsRoute(gtfs: Gtfs, parent: Element, gtfsRoute: Ro
             for (const language in lineNameTranslationsMap[gtfsRoute.route_id]) {
                 const translatedName = lineNameTranslationsMap[gtfsRoute.route_id][language];
                 const alternativeText = alternativeTexts.node('AlternativeText');
+                const altTextId= cs + 'AlternativeText' + ':' + gtfsRoute.route_id + ':' + language;
+                alternativeText.attr({ id: altTextId, version: '1' });
                 alternativeText.attr({ attributeName: 'Name'});
                 const text = alternativeText.node('Text');
                 text.attr({ lang: language });
@@ -219,8 +222,10 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
             if (translations) {
                 const alternativeNames = stopPlace.node('alternativeNames');
                 for (const [language, translation] of Object.entries(translations)) {
+                    const altNameId = stopCs + 'AlternativeName' + ':' + mainStopToUse.stop_id + ':' + language;
                     alternativeNames
                         .node('AlternativeName')
+                        .attr({ id: altNameId, version: '1' })
                         .node('NameType')
                         .text('translation')
                         .parent()

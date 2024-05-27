@@ -245,45 +245,49 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
             allStopPlaces.push(stopPlace);
         }
 
-        // Create the Quay element
-        let quays = stopPlace.get('quays') as Element;
-        if (!quays) {
-            quays = stopPlace.node('quays');
-        }
-        const quayId = stopCs + 'Quay' + ':' + stop.stop_id;
-        const quay = quays.node('Quay').attr({ id: quayId, version: '1' });
+        const locType = stop.location_type;
+        if (locType == '0' || _.isEmpty(locType)) {
 
-        if (!_.isEmpty(stop.stop_digiroad_id)) {
-            const keyList = quay.node('keyList');
-            keyList.node('KeyValue')
-                .node('Key').text('digiroad_id').parent()
-                .node('Value').text(stop.stop_digiroad_id);
-        }
-        if (!_.isEmpty(stop.stop_name)) {
-            quay.node('Name').text(stop.stop_name);
-        }
-        quay.node('Centroid').node('Location')
-            .node('Longitude').text(stop.stop_lon.toString()).parent()
-            .node('Latitude').text(stop.stop_lat.toString()).parent();
+            // Create the Quay element
+            let quays = stopPlace.get('quays') as Element;
+            if (!quays) {
+                quays = stopPlace.node('quays');
+            }
+            const quayId = stopCs + 'Quay' + ':' + stop.stop_id;
+            const quay = quays.node('Quay').attr({id: quayId, version: '1'});
 
-        if (!_.isEmpty(stop.stop_code)) {
-            quay.node('PublicCode').text(stop.stop_code);
-        }
+            if (!_.isEmpty(stop.stop_digiroad_id)) {
+                const keyList = quay.node('keyList');
+                keyList.node('KeyValue')
+                    .node('Key').text('digiroad_id').parent()
+                    .node('Value').text(stop.stop_digiroad_id);
+            }
+            if (!_.isEmpty(stop.stop_name)) {
+                quay.node('Name').text(stop.stop_name);
+            }
+            quay.node('Centroid').node('Location')
+                .node('Longitude').text(stop.stop_lon.toString()).parent()
+                .node('Latitude').text(stop.stop_lat.toString()).parent();
 
-        if (!allStopsOnly && stopAssignments && scheduledStopPoints) {
-            const scheduledStopPointId = cs + 'ScheduledStopPoint' + ':' + stop.stop_id;
-            const scheduledStopPoint = scheduledStopPoints.node('ScheduledStopPoint').attr({
-                id: scheduledStopPointId,
-                version: '1'
-            });
-            scheduledStopPoint.node('Name').text(stop.stop_name);
+            if (!_.isEmpty(stop.stop_code)) {
+                quay.node('PublicCode').text(stop.stop_code);
+            }
 
-            const stopAssignment = stopAssignments.node('PassengerStopAssignment')
-                .attr({id: cs + 'StopAssignment' + ':' + stop.stop_id, version: '1'});
-            stopAssignment.attr({order: (i + 1).toString()}); // Set the order attribute based on the index
-            stopAssignment.node('ScheduledStopPointRef').attr({ref: scheduledStopPointId, version: '1'});
-            stopAssignment.node('StopPlaceRef').attr({ref: stopPlaceId, version: '1'});
-            stopAssignment.node('QuayRef').attr({ref: quayId, version: '1'});
+            if (!allStopsOnly && stopAssignments && scheduledStopPoints) {
+                const scheduledStopPointId = cs + 'ScheduledStopPoint' + ':' + stop.stop_id;
+                const scheduledStopPoint = scheduledStopPoints.node('ScheduledStopPoint').attr({
+                    id: scheduledStopPointId,
+                    version: '1'
+                });
+                scheduledStopPoint.node('Name').text(stop.stop_name);
+
+                const stopAssignment = stopAssignments.node('PassengerStopAssignment')
+                    .attr({id: cs + 'StopAssignment' + ':' + stop.stop_id, version: '1'});
+                stopAssignment.attr({order: (i + 1).toString()}); // Set the order attribute based on the index
+                stopAssignment.node('ScheduledStopPointRef').attr({ref: scheduledStopPointId, version: '1'});
+                stopAssignment.node('StopPlaceRef').attr({ref: stopPlaceId, version: '1'});
+                stopAssignment.node('QuayRef').attr({ref: quayId, version: '1'});
+            }
         }
     }
 }

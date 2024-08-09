@@ -34,6 +34,7 @@ if (!gtfs || !netex) {
 
     const gtfsFilePath = path.resolve(gtfs);
     const netexDirPath = path.resolve(netex);
+    const errorFile: object[] =  [];
 
     convertGtfs(gtfsFilePath, netexDirPath)
         .then(() => {
@@ -41,6 +42,12 @@ if (!gtfs || !netex) {
         })
         .catch((error) => {
             log.error('Error during conversion: ' + error);
+            const data = { errorMsg: error.message };
+            errorFile.push(data)
+            const errorData = JSON.stringify(errorFile, null, 2);
+            fs.writeFile(netexDirPath +'/errors.json', errorData, (error) => {
+                console.log("error file written")
+            })
         });
 }
 

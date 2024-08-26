@@ -44,9 +44,10 @@ if (!gtfs || !netex) {
             log.error('Error during conversion: ' + error);
             const data = { errorMsg: error.message };
             errorFile.push(data)
+            const errorFilePath = netexDirPath + '/errors.json';
             const errorData = JSON.stringify(errorFile, null, 2);
-            fs.writeFile(netexDirPath +'/errors.json', errorData, (error) => {
-                console.log("error file written")
+            fs.writeFile(errorFilePath, errorData, (error) => {
+                log.info('error file written to ' + errorFilePath);
             })
         });
 }

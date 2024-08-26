@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import parse from 'csv-parse';
+import { parse } from 'csv-parse';
 import StreamZip from 'node-stream-zip';
 import {Agency, Calendar, CalendarDate, Gtfs, Route, Stop, StopTime, Trip, Shape, Translation, FeedInfo} from "./gtfs-types";
 import {getAbsolutePath, gunzipFile, isGzipFile, isZipFile } from "./file-utils";

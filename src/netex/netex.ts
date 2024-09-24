@@ -6,6 +6,7 @@ import {
     findAgencyForId,
     getNetexOperatorId,
     getNetexLineId,
+    getNetexRouteId,
     getTransportMode,
     findTripsForRouteId,
     findStopsForTrips,
@@ -50,6 +51,7 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string): Promise<string> {
         const organisations = resourceFrame.get('organisations') as Element;
         const operator = createNetexOperatorFromGtfsRoute(gtfs, organisations, route);
         const line = createNetexLineFromGtfsRoute(gtfs, serviceFrame, route);
+        createNetexRouteFromGtfsRoute(gtfs, serviceFrame, route, stopIndex, stoptimesIndex);
         createNetexStops(gtfs, xmlDoc, route, stopIndex, allStopPlaces);
         const dayTypes = createDayTypesForRoute(gtfs, serviceCalendarFrame, route, agency);
         createNetexJourneys(gtfs, xmlDoc, route, dayTypes, operator, line, agency, feedInfo as FeedInfo, stoptimesIndex, stats);
@@ -111,6 +113,8 @@ function createNetexDocumentTemplate(stopsOnly: boolean): Document {
     const organisations = resourceFrame.node('organisations');
     const siteFrame = frames.node('SiteFrame').attr({ id: 'SiteFrame_1', version: '1' });
     const serviceFrame = frames.node('ServiceFrame').attr({ id: 'ServiceFrame_1', version: '1' });
+    const routePoints = serviceFrame.node('routePoints');
+    const routes = serviceFrame.node('routes');
     const lines = serviceFrame.node('lines');
     const destinationDisplays = serviceFrame.node('destinationDisplays');
     const scheduledStopPoints = serviceFrame.node('scheduledStopPoints');
@@ -172,6 +176,46 @@ function createNetexLineFromGtfsRoute(gtfs: Gtfs, parent: Element, gtfsRoute: Ro
     return lineElement; // Return the 'lineElement'
 }
 
+function createNetexRouteFromGtfsRoute(gtfs: Gtfs, parent: Element, gtfsRoute: Route,  stopIndex: { [p: string]: Stop }, stoptimesIndex: { [trip_id: string]: StopTime[] } ): Element {
+    const agency = findAgencyForId(gtfs, gtfsRoute.agency_id);
+    const feedInfo = gtfs.feed_info && gtfs.feed_info[0];
+    const cs = getCodeSpaceForAgency(agency, feedInfo as FeedInfo);
+    const routes = parent.get('routes') as Element;
+    const routeId = cs + 'Route' + ':' + gtfsRoute.route_id;
+
+    const routeElement = routes.node('Route').attr({id: routeId, version: '1'});
+    // Use GTFS route_long_name or route_short_name for the Name element in NeTEx
+    if (!_.isEmpty(gtfsRoute.route_long_name)) {
+        routeElement.node('Name').text(gtfsRoute.route_long_name);
+    } else if (!_.isEmpty(gtfsRoute.route_short_name)) {
+        routeElement.node('Name').text(gtfsRoute.route_short_name);
+    }
+    const lineId = getNetexLineId(gtfsRoute, agency, feedInfo as FeedInfo);
+    routeElement.node('LineRef').attr({ ref: lineId, version: '1' });
+
+    // Add the points in sequence for this route based on stops of the first trip
+    const trips = findTripsForRouteId(gtfs, gtfsRoute.route_id);
+    if (trips.length > 0) {
+        const pointsInSequence = routeElement.node('pointsInSequence');
+        const stopTimes = findStopTimesForTripId(stoptimesIndex, trips[0].trip_id);
+        for (let i = 0; i < stopTimes.length; i++) {
+            const stopTime = stopTimes[i];
+            const stop = stopIndex[stopTime.stop_id];
+
+            if (!stop) {
+                log.warn(`Stop not found for stop_id: ${stopTime.stop_id}`);
+                continue;
+            }
+
+            const pointOnRouteId = `${cs}PointOnRoute:${stop.stop_id}-${i}`;
+            const pointOnRoute = pointsInSequence.node('PointOnRoute').attr({ id: pointOnRouteId, version: '1', order: (i + 1).toString() });
+            const routePointId = `${cs}RoutePoint:${stop.stop_id}`;
+            pointOnRoute.node('RoutePointRef').attr({ ref: routePointId, version: '1' });
+        }
+    }
+    return routeElement;
+}
+
 const USE_AGENCY_CODESPACES = true; // process.env.USE_AGENCY_CODESPACES === 'true'
 
 // Create the StopPlace and ScheduleStopPoint elements
@@ -184,7 +228,7 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
     const siteFrame = xmlDoc.get('//SiteFrame') as Element;
     const stopPlaces = siteFrame.node('stopPlaces');
 
-    let serviceFrame, scheduledStopPoints, stopAssignments;
+    let serviceFrame, scheduledStopPoints, stopAssignments, routePoints;
     let trips : Trip[] = [];
     let stops: Stop[] = [];
     if (allStopsOnly) {
@@ -195,6 +239,7 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
         stopAssignments = serviceFrame.get('stopAssignments') as Element;
         trips = findTripsForRouteId(gtfs, gtfsRoute.route_id);
         stops = findStopsForTrips(gtfs, stopIndex, trips);
+        routePoints = serviceFrame.get('routePoints') as Element;
     }
 
     const transportMode = getTransportMode(gtfsRoute.route_type);
@@ -273,7 +318,7 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
                 quay.node('PublicCode').text(stop.stop_code);
             }
 
-            if (!allStopsOnly && stopAssignments && scheduledStopPoints) {
+            if (!allStopsOnly && stopAssignments && scheduledStopPoints && routePoints) {
                 const scheduledStopPointId = cs + 'ScheduledStopPoint' + ':' + stop.stop_id;
                 const scheduledStopPoint = scheduledStopPoints.node('ScheduledStopPoint').attr({
                     id: scheduledStopPointId,
@@ -287,6 +332,13 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
                 stopAssignment.node('ScheduledStopPointRef').attr({ref: scheduledStopPointId, version: '1'});
                 stopAssignment.node('StopPlaceRef').attr({ref: stopPlaceId, version: '1'});
                 stopAssignment.node('QuayRef').attr({ref: quayId, version: '1'});
+
+                const routePointId = cs + 'RoutePoint' + ':' + stop.stop_id;
+                const routePoint = routePoints.node('RoutePoint').attr({ id: routePointId, version: '1' });
+                const projections = routePoint.node('projections');
+                const pointProjectionId = cs + 'PointProjection' + ':' + stop.stop_id;
+                const pointProjection = projections.node('PointProjection').attr({ id: pointProjectionId, version: '1' });
+                pointProjection.node('ProjectToPointRef').attr({ ref: scheduledStopPointId, version: '1' });
             }
         }
     }

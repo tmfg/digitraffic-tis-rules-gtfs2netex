@@ -101,6 +101,11 @@ function getNetexLineId(gtfsRoute: Route, agency: Agency, feedInfo: FeedInfo): s
     return codeSpace + 'Line' + ':' + gtfsRoute.route_id;
 }
 
+function getNetexRouteId(gtfsRoute: Route, agency: Agency, feedInfo: FeedInfo): string {
+    const codeSpace = getCodeSpaceForAgency(agency, feedInfo);
+    return codeSpace + 'Route' + ':' + gtfsRoute.route_id;
+}
+
 function getNetexOperatorId(gtfsAgency: Agency): string {
     return 'FSR:' + 'Operator' + ':' + _.camelCase(gtfsAgency.agency_name);
 }
@@ -120,6 +125,11 @@ function getTransportMode(gtfsRouteType: number): string {
         702: 'bus',
         703: 'bus',
         704: 'bus',
+        710: 'bus',
+        711: 'bus',
+        712: 'bus',
+        713: 'bus',
+        714: 'bus',
         715: 'bus',
         4: 'water',
         5: 'cablecar',
@@ -352,6 +362,7 @@ export {
     indexStopTimesByTripId,
     indexStopsById,
     getNetexLineId,
+    getNetexRouteId,
     getNetexOperatorId,
     getTransportMode,
     getStopPlaceType,

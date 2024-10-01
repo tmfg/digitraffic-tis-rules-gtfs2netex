@@ -54,7 +54,7 @@
     "commander": "^11.1.0",
     "dotenv": "^16.0.3",
     "libxmljs2": "^0.32.0",
-    "ts-luxon": "^4.0.1",
+    "ts-luxon": "^5.0.6",
     "winston-daily-rotate-file": "5.0.0"
   },
   "overrides": {

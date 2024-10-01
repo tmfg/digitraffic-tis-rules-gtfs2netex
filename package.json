@@ -18,7 +18,7 @@
     "@types/haversine": "^1.1.4",
     "@types/lodash": "^4.14.172",
     "@types/mocha": "^10.0.8",
-    "@types/node": "^22.0.2",
+    "@types/node": "^22.7.4",
     "@types/yargs": "^17.0.32",
     "adm-zip": "0.5.16",
     "archiver": "7.0.1",

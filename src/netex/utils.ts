@@ -290,7 +290,7 @@ function writeXmlDocToFile(xmlDoc: Document, outputPath: string, filename: strin
     }
 
     // Write the xmlDoc to the file
-    fs.writeFileSync(filePath, xmlString, {encoding: 'utf8'});
+    writeFile(filePath, xmlString);
 }
 
 function writeStatsToFile(stats: Stats, outputPath: string, filename: string): void {
@@ -303,7 +303,21 @@ function writeStatsToFile(stats: Stats, outputPath: string, filename: string): v
     }
 
     // Write the stats to the file
-    fs.writeFileSync(filePath, statsString, {encoding: 'utf8'});
+    writeFile(filePath, statsString);
+}
+
+function writeFile(filePath: string, data: string, encoding: BufferEncoding = 'utf8'): void {
+    let fd = 0;
+    try {
+        fd = fs.openSync(filePath, 'w');
+        fs.writeSync(fd, data, 0, encoding);
+    } catch (error) {
+        log.error('Error writing file: ' + error);
+    } finally {
+        if (fd !== 0) {
+            fs.closeSync(fd);
+        }
+    }
 }
 
 function createDestinationDisplayForTrip(destinationDisplays: Element, cs: string, trip: Trip, translationsMap: Record<string, Record<string, string>>) {

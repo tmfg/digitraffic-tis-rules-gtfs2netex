@@ -40,19 +40,19 @@ function indexStopsById(gtfs: Gtfs): { [stop_id: string]: Stop } {
     return stopsById;
 }
 
-function findStopsForTrips_old(gtfs: Gtfs, trips: Trip[]): Stop[] {
-    let stopIds = gtfs.stop_times.filter((st) => trips.map((t) => t.trip_id).includes(st.trip_id)).map((st) => st.stop_id);
-    stopIds = Array.from(new Set(stopIds));
-    return gtfs.stops.filter((s) => stopIds.includes(s.stop_id)) as Stop[];
-}
-
-function findStopsForTrips(gtfs: Gtfs, stopsById: { [stop_id: string]: Stop }, trips: Trip[]): Stop[] {
-    const tripIds = trips.map((t) => t.trip_id);
-    const stopIds = gtfs.stop_times
-        .filter((st) => tripIds.includes(st.trip_id))
-        .map((st) => st.stop_id);
-    const uniqueStopIds = Array.from(new Set(stopIds));
-    return uniqueStopIds.map((stopId) => stopsById[stopId]).filter((s) => s) as Stop[];
+function findStopsForTrips(gtfs: Gtfs, stopsById: { [stop_id: string]: Stop }, trips: Trip[], stoptimesIndex: { [trip_id: string]: StopTime[] }): Stop[] {
+    // Create a Set to store unique stop IDs encountered
+    const stopIdSet = new Set<string>();
+    for (const trip of trips) {
+        const stopTimesForTrip = stoptimesIndex[trip.trip_id];
+        if (stopTimesForTrip) {
+            for (const stopTime of stopTimesForTrip) {
+                stopIdSet.add(stopTime.stop_id);
+            }
+        }
+    }
+    // Map the unique stop IDs to their corresponding Stop objects
+    return Array.from(stopIdSet).map((stopId) => stopsById[stopId]).filter((s) => s) as Stop[];
 }
 
 function findCalendarsForTrips(gtfs: Gtfs, trips: Trip[]): Calendar[] {
@@ -131,6 +131,7 @@ function getTransportMode(gtfsRouteType: number): string {
         713: 'bus',
         714: 'bus',
         715: 'bus',
+        900: 'tram',
         4: 'water',
         5: 'cablecar',
         6: 'gondola',

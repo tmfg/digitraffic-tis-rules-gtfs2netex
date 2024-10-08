@@ -52,7 +52,7 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string): Promise<string> {
         const operator = createNetexOperatorFromGtfsRoute(gtfs, organisations, route);
         const line = createNetexLineFromGtfsRoute(gtfs, serviceFrame, route);
         createNetexRouteFromGtfsRoute(gtfs, serviceFrame, route, stopIndex, stoptimesIndex);
-        createNetexStops(gtfs, xmlDoc, route, stopIndex, allStopPlaces);
+        createNetexStops(gtfs, xmlDoc, route, stopIndex, stoptimesIndex, allStopPlaces);
         const dayTypes = createDayTypesForRoute(gtfs, serviceCalendarFrame, route, agency);
         createNetexJourneys(gtfs, xmlDoc, route, dayTypes, operator, line, agency, feedInfo as FeedInfo, stoptimesIndex, stats);
         createNetexServiceLinks(gtfs, xmlDoc, route, stoptimesIndex);
@@ -66,7 +66,7 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string): Promise<string> {
     // Write all stops to a separate file
     allStopPlaces = [];
     const allStopsDoc = createNetexDocumentTemplate(true);
-    createNetexStops(gtfs, allStopsDoc, gtfs.routes[0], stopIndex, allStopPlaces, true);
+    createNetexStops(gtfs, allStopsDoc, gtfs.routes[0], stopIndex, stoptimesIndex, allStopPlaces, true);
     allStopPlaces = _.uniqBy(allStopPlaces, elem => elem.attr('id')?.value());
     stats.StopPlaces = allStopPlaces.length;
     stats.Quays = allStopsDoc.find('//Quay').length;
@@ -219,7 +219,7 @@ function createNetexRouteFromGtfsRoute(gtfs: Gtfs, parent: Element, gtfsRoute: R
 const USE_AGENCY_CODESPACES = true; // process.env.USE_AGENCY_CODESPACES === 'true'
 
 // Create the StopPlace and ScheduleStopPoint elements
-function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIndex: { [p: string]: Stop }, allStopPlaces: Element[], allStopsOnly = false): void {
+function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIndex: { [p: string]: Stop }, stoptimesIndex: { [trip_id: string]: StopTime[] }, allStopPlaces: Element[], allStopsOnly = false): void {
 
     const agency = findAgencyForId(gtfs, gtfsRoute.agency_id);
     const feedInfo = gtfs.feed_info && gtfs.feed_info[0];
@@ -238,7 +238,7 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
         scheduledStopPoints = serviceFrame.get('scheduledStopPoints') as Element;
         stopAssignments = serviceFrame.get('stopAssignments') as Element;
         trips = findTripsForRouteId(gtfs, gtfsRoute.route_id);
-        stops = findStopsForTrips(gtfs, stopIndex, trips);
+        stops = findStopsForTrips(gtfs, stopIndex, trips, stoptimesIndex);
         routePoints = serviceFrame.get('routePoints') as Element;
     }
 

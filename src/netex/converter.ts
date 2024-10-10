@@ -9,9 +9,9 @@ import {rootLogger} from "../utils/logger";
 
 const log = rootLogger.child({src: 'converter.ts'});
 
-async function convertGtfs(gtfsFilePath: string, netexFilePath: string): Promise<void> {
+async function convertGtfs(gtfsFilePath: string, netexFilePath: string, stopsOnly: boolean): Promise<void> {
     const gtfs = await readGtfs(gtfsFilePath);
-    const res = await writeNeTEx(gtfs, netexFilePath);
+    const res = await writeNeTEx(gtfs, netexFilePath, stopsOnly);
 }
 
 const program = new Command();
@@ -19,9 +19,10 @@ const program = new Command();
 program
     .option('-g, --gtfs <gtfsFileName>', 'GTFS file name')
     .option('-n, --netex <netexDirectory>', 'NeTEx directory')
+    .option('-s, --stops-only', 'Generate NeTEx only for stops')
     .parse(process.argv);
 
-const { gtfs, netex } = program.opts();
+const { gtfs, netex, stopsOnly } = program.opts();
 
 if (!gtfs || !netex) {
     console.error('Both GTFS file name and NeTEx directory are required.');
@@ -36,7 +37,7 @@ if (!gtfs || !netex) {
     const netexDirPath = path.resolve(netex);
     const errorFile: object[] =  [];
 
-    convertGtfs(gtfsFilePath, netexDirPath)
+    convertGtfs(gtfsFilePath, netexDirPath, stopsOnly)
         .then(() => {
             log.info('Conversion completed successfully.');
         })

@@ -28,7 +28,7 @@ import { rootLogger } from "../utils/logger";
 
 const log = rootLogger.child({src: 'netex.ts'});
 
-async function writeNeTEx(gtfs: Gtfs, filePath: string): Promise<string> {
+async function writeNeTEx(gtfs: Gtfs, filePath: string, stopsOnly: boolean = false): Promise<string> {
     const stoptimesIndex = indexStopTimesByTripId(gtfs);
     const stopIndex = indexStopsById(gtfs);
     let allStopPlaces: Element[] = []
@@ -38,29 +38,32 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string): Promise<string> {
     stats.ServiceJourneys = 0;
     stats.Lines = gtfs.routes.length;
 
-    for (let i = 0; i < gtfs.routes.length; i++) {
-        const route = gtfs.routes[i];
-        const agency = findAgencyForId(gtfs, route.agency_id);
-        const feedInfo = gtfs.feed_info && gtfs.feed_info[0];
-        const lineId = getNetexLineId(route, agency, feedInfo as FeedInfo);
-        log.info('generating netex for route ' + (i + 1) + ' of ' + gtfs.routes.length + ' : ' + lineId);
-        const xmlDoc = createNetexDocumentTemplate(false);
-        const serviceFrame = xmlDoc.get('//ServiceFrame') as Element;
-        const resourceFrame = xmlDoc.get('//ResourceFrame') as Element;
-        const serviceCalendarFrame = xmlDoc.get('//ServiceCalendarFrame') as Element;
-        const organisations = resourceFrame.get('organisations') as Element;
-        const operator = createNetexOperatorFromGtfsRoute(gtfs, organisations, route);
-        const line = createNetexLineFromGtfsRoute(gtfs, serviceFrame, route);
-        createNetexRouteFromGtfsRoute(gtfs, serviceFrame, route, stopIndex, stoptimesIndex);
-        createNetexStops(gtfs, xmlDoc, route, stopIndex, stoptimesIndex, allStopPlaces);
-        const dayTypes = createDayTypesForRoute(gtfs, serviceCalendarFrame, route, agency);
-        createNetexJourneys(gtfs, xmlDoc, route, dayTypes, operator, line, agency, feedInfo as FeedInfo, stoptimesIndex, stats);
-        createNetexServiceLinks(gtfs, xmlDoc, route, stoptimesIndex);
-        replaceAttributeContainingString(xmlDoc, 'id', 'perille_', 'Fintraffic_');
-        replaceAttributeContainingString(xmlDoc, 'ref', 'perille_', 'Fintraffic_');
-        const fileName = _.snakeCase(lineId.replace('perille_', 'Fintraffic_')) + '.xml';
-        writeXmlDocToFile(xmlDoc, filePath, fileName);
-        log.info('...done.');
+    if (!stopsOnly) {
+        for (let i = 0; i < gtfs.routes.length; i++) {
+            const route = gtfs.routes[i];
+            const agency = findAgencyForId(gtfs, route.agency_id);
+            const feedInfo = gtfs.feed_info && gtfs.feed_info[0];
+            const lineId = getNetexLineId(route, agency, feedInfo as FeedInfo);
+            log.info('generating netex for route ' + (i + 1) + ' of ' + gtfs.routes.length + ' : ' + lineId);
+            const xmlDoc = createNetexDocumentTemplate(false);
+            const serviceFrame = xmlDoc.get('//ServiceFrame') as Element;
+            const resourceFrame = xmlDoc.get('//ResourceFrame') as Element;
+            const serviceCalendarFrame = xmlDoc.get('//ServiceCalendarFrame') as Element;
+            const organisations = resourceFrame.get('organisations') as Element;
+            const operator = createNetexOperatorFromGtfsRoute(gtfs, organisations, route);
+            const line = createNetexLineFromGtfsRoute(gtfs, serviceFrame, route);
+            createNetexRouteFromGtfsRoute(gtfs, serviceFrame, route, stopIndex, stoptimesIndex);
+            createNetexStops(gtfs, xmlDoc, route, stopIndex, stoptimesIndex, allStopPlaces);
+            const dayTypes = createDayTypesForRoute(gtfs, serviceCalendarFrame, route, agency);
+            createNetexJourneys(gtfs, xmlDoc, route, dayTypes, operator, line, agency, feedInfo as FeedInfo, stoptimesIndex, stats);
+            createNetexServiceLinks(gtfs, xmlDoc, route, stoptimesIndex);
+            replaceAttributeContainingString(xmlDoc, 'id', 'perille_', 'Fintraffic_');
+            replaceAttributeContainingString(xmlDoc, 'ref', 'perille_', 'Fintraffic_');
+            const fileName = _.snakeCase(lineId.replace('perille_', 'Fintraffic_')) + '.xml';
+            writeXmlDocToFile(xmlDoc, filePath, fileName);
+            xmlDoc.root()?.remove(); // Clear the XML document from memory
+            log.info('...done. ' +  allStopPlaces.length);
+        }
     }
 
     // Write all stops to a separate file
@@ -287,7 +290,7 @@ function createNetexStops(gtfs: Gtfs, xmlDoc: Document, gtfsRoute: Route, stopIn
 
             // Store the created StopPlace in the map
             stopPlacesMap[stopPlaceId] = stopPlace;
-            allStopPlaces.push(stopPlace);
+            allStopPlaces.push(stopPlace.clone());
         }
 
         const locType = stop.location_type;

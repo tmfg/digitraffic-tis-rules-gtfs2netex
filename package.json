@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "del-cli ./build && tsc",
-    "convert": "node build/netex/converter.js"
+    "convert": "node --max-old-space-size=8192 build/netex/converter.js"
   },
   "keywords": [],
   "author": "",

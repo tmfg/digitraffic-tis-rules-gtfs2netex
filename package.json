@@ -2,17 +2,17 @@
   "name": "gtfs2netex",
   "version": "0.53.0",
   "description": "GTFS to Nordic NeTEx converter",
-  "main": "converter.js",
+  "keywords": [],
+  "author": "",
+  "license": "EUPL-1.2",
   "engines": {
     "node": "20.x"
   },
+  "main": "converter.js",
   "scripts": {
     "build": "del-cli ./build && tsc",
     "convert": "node --max-old-space-size=8192 build/netex/converter.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "EUPL-1.2",
   "devDependencies": {
     "@types/chai": "^4.2.14",
     "@types/haversine": "^1.1.4",

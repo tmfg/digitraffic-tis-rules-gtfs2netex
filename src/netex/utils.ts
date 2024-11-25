@@ -324,7 +324,7 @@ function writeFile(filePath: string, data: string, encoding: BufferEncoding = 'u
 function createDestinationDisplayForTrip(destinationDisplays: Element, cs: string, trip: Trip, translationsMap: Record<string, Record<string, string>>) {
     const destinationDisplay = destinationDisplays
         .node('DestinationDisplay')
-        .attr({version: '1', id: cs + 'DestinationDisplay:' + trip.trip_headsign});
+        .attr({version: '1', id: cs + 'DestinationDisplay:' + normalizeGtfsId(trip.trip_headsign)});
 
     // Include translated headsign if available
     const translations = translationsMap[trip.trip_id];
@@ -334,6 +334,7 @@ function createDestinationDisplayForTrip(destinationDisplays: Element, cs: strin
             const translatedName = translationsMap[trip.trip_id][language];
             const alternativeText = alternativeTexts.node('AlternativeText');
             alternativeText.attr({attributeName: 'FrontText'});
+            alternativeText.attr({id: cs + 'AlternativeText:Trip_' + normalizeGtfsId(trip.trip_headsign) + "_" + language});
             const text = alternativeText.node('Text');
             text.attr({lang: language});
             text.text(translatedName);
@@ -347,7 +348,7 @@ function createDestinationDisplayForTrip(destinationDisplays: Element, cs: strin
 function createDestinationDisplayForStopTime(destinationDisplays: Element, cs: string, stopTime: StopTime, translationsMap: Record<string, Record<string, string>>) {
     const destinationDisplay = destinationDisplays
         .node('DestinationDisplay')
-        .attr({version: '1', id: cs + 'DestinationDisplay:' + stopTime.stop_headsign});
+        .attr({version: '1', id: cs + 'DestinationDisplay:' + normalizeGtfsId(stopTime.stop_headsign)});
 
     // Include translated headsign if available
     const translations = translationsMap[stopTime.trip_id];
@@ -357,6 +358,7 @@ function createDestinationDisplayForStopTime(destinationDisplays: Element, cs: s
             const translatedName = translationsMap[stopTime.trip_id][language];
             const alternativeText = alternativeTexts.node('AlternativeText');
             alternativeText.attr({attributeName: 'FrontText'});
+            alternativeText.attr({id: cs + 'AlternativeText:StopTime_' + normalizeGtfsId(stopTime.stop_headsign) + "_" + language});
             const text = alternativeText.node('Text');
             text.attr({lang: language});
             text.text(translatedName);
@@ -365,6 +367,77 @@ function createDestinationDisplayForStopTime(destinationDisplays: Element, cs: s
 
     destinationDisplay.node('FrontText').text(stopTime.stop_headsign);
     return destinationDisplay;
+}
+
+const transportModePriority = ['air', 'water', 'rail', 'metro', 'bus', 'tram', 'cablecar', 'gondola', 'funicular', 'other']; // Higher priority first
+
+function getTransportModePriority(mode: string): number {
+    const priority = transportModePriority.indexOf(mode);
+    return priority === -1 ? transportModePriority.length : priority; // Return a lower priority if not found
+}
+
+function setTransportModeWithPriority(
+    stopPlace: Element,
+    gtfsRouteType: number,
+    cs: string
+): void {
+    // Convert GTFS route type to NeTEx transport mode
+    const netexTransportMode = getTransportMode(gtfsRouteType);
+
+    // Check if the StopPlace already has a primary mode set
+    const existingTransportModeElement = stopPlace.get('TransportMode') as Element;
+    const existingTransportMode = existingTransportModeElement?.text();
+
+    if (!existingTransportMode) {
+        // No primary mode set yet, use the current mode as the primary mode
+        stopPlace.node('TransportMode').text(netexTransportMode);
+        stopPlace.node('StopPlaceType').text(getStopPlaceType(gtfsRouteType)); // Set StopPlaceType based on primary mode
+    } else {
+        const existingPriority = getTransportModePriority(existingTransportMode);
+        const currentPriority = getTransportModePriority(netexTransportMode);
+
+        if (currentPriority < existingPriority) {
+            // Current mode has a higher priority, so make it the primary mode
+            existingTransportModeElement.text(netexTransportMode); // Update primary mode to current
+            (stopPlace.get('StopPlaceType') as Element)?.text(getStopPlaceType(gtfsRouteType)); // Update StopPlaceType to match new primary mode
+
+            // Move existing primary mode to OtherTransportModes
+            updateOtherTransportModes(stopPlace, existingTransportMode);
+        } else if (netexTransportMode !== existingTransportMode) {
+            // If the current mode is different from the existing primary mode
+            // and doesn't have a higher priority, add it to OtherTransportModes
+            updateOtherTransportModes(stopPlace, netexTransportMode);
+        }
+    }
+}
+
+
+// Helper function to update OtherTransportModes and place it after TransportMode
+function updateOtherTransportModes(stopPlace: Element, modeToAdd: string): void {
+    // Remove any existing OtherTransportModes element to ensure it’s fresh
+    const existingOtherTransportModesElement = stopPlace.get('OtherTransportModes') as Element;
+    if (existingOtherTransportModesElement) {
+        existingOtherTransportModesElement.remove();
+    }
+
+    // Collect the modes to be placed in OtherTransportModes
+    let otherModes = new Set<string>();
+    if (existingOtherTransportModesElement) {
+        otherModes = new Set(existingOtherTransportModesElement.text().split(' ').filter(Boolean));
+    }
+    otherModes.add(modeToAdd);
+
+    // Create a new OtherTransportModes element directly after TransportMode
+    const transportModeElement = stopPlace.get('TransportMode') as Element;
+    const otherTransportModesElement = stopPlace.node('OtherTransportModes');
+    otherTransportModesElement.text(Array.from(otherModes).join(' '));
+
+    // Reorder the node so that OtherTransportModes is right after TransportMode
+    transportModeElement.addNextSibling(otherTransportModesElement);
+}
+
+function normalizeGtfsId(id: string): string {
+    return _.snakeCase(id);
 }
 
 export {
@@ -391,5 +464,7 @@ export {
     getTranslationsMap,
     findParentStop,
     createDestinationDisplayForTrip,
-    createDestinationDisplayForStopTime
+    createDestinationDisplayForStopTime,
+    setTransportModeWithPriority,
+    normalizeGtfsId
 };

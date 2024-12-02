@@ -4,7 +4,7 @@ import {existsSync, readdir} from "fs";
 import {resolve} from 'path';
 import {mkdirp} from 'mkdirp';
 import * as fs from 'fs';
-import rimraf from 'rimraf';
+import { promises as fsPromises } from 'fs';
 import zlib from 'zlib';
 import FileType from 'file-type'; // using v16, see https://github.com/sindresorhus/file-type/issues/535
 import {DateTime, Duration} from "ts-luxon";
@@ -198,15 +198,12 @@ async function readFileAsString(path: string): Promise<string> {
 
 async function removeFile(path: string): Promise<string> {
     const absolutePath = getAbsolutePath(path);
-    return new Promise((resolve, reject) => {
-        rimraf(path, error => {
-            if (_.isNil(error)) {
-                resolve(absolutePath);
-            } else {
-                reject(error);
-            }
-        });
-    });
+    try {
+        await fsPromises.rm(absolutePath, { recursive: true, force: true });
+        return absolutePath;
+    } catch (error) {
+        throw error;
+    }
 }
 
 async function cleanDir(path: string): Promise<string> {

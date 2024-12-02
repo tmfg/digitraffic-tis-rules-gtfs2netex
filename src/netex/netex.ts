@@ -39,6 +39,9 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string, stopsOnly: boolean = fal
     stats.ServiceJourneys = 0;
     stats.Lines = gtfs.routes.length;
 
+    const gcFrequency = 500; // Trigger GC every 500 routes (if enabled)
+    let lastGcCall = 0;
+
     for (let i = 0; i < gtfs.routes.length; i++) {
         const route = gtfs.routes[i];
         const agency = findAgencyForId(gtfs, route.agency_id);
@@ -64,6 +67,14 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string, stopsOnly: boolean = fal
             writeXmlDocToFile(xmlDoc, filePath, fileName);
         }
         xmlDoc.root()?.remove(); // Clear the XML document from memory
+
+        // Trigger garbage collection periodically (if enabled)
+        if (typeof global.gc === 'function' && i - lastGcCall >= gcFrequency) {
+            global.gc();
+            lastGcCall = i;
+            log.info(`Explicit garbage collection triggered after processing ${i} routes.`);
+        }
+
         log.info('...done. (stop count:' +  Object.keys(stopPlacesMap).length + ')');
     }
 

@@ -1,8 +1,10 @@
 import _ from "lodash";
 import {Agency, Calendar, CalendarDate, Gtfs, Route, Stop, StopTime, Trip, FeedInfo, Translation} from "../utils/gtfs-types";
-import {Document, Element} from "libxmljs2";
 import * as fs from 'fs';
 import { rootLogger } from "../utils/logger";
+import * as xpath from 'xpath';
+import { Document, Element, XMLSerializer, Node as XmlNode } from '@xmldom/xmldom';
+import xmlFormat from 'xml-formatter';
 
 const log = rootLogger.child({src: 'utils.ts'});
 
@@ -219,36 +221,79 @@ function getCodeSpaceForAgencyByUrl(url: string): string {
     return '';
 }
 
-function replaceAttributeContainingString(xmlDoc: Document, attributeName: string, searchString: string, replacement: string): void {
-    const rootElement: Element = xmlDoc.root()!;
-    const elements: Element[] = rootElement.find(`//*[contains(@${attributeName}, '${searchString}')]`); // Find all elements with the specified attribute containing the search string
+function replaceAttributeContainingString(
+    xmlDoc: Document,
+    attributeName: string,
+    searchString: string,
+    replacement: string
+): void {
+    // XPath query to find all elements with an attribute containing the search string
+    const xpathQuery = `//*[contains(@${attributeName}, '${searchString}')]`;
 
-    for (const element of elements) {
-        const attribute = element.attr(attributeName);
+    // Select matching nodes using xpath and safely cast
+    const nodes= getElementsFromNode(xpathQuery, xmlDoc);
 
-        if (attribute) {
-            const oldValue = attribute.value();
-            const newValue = oldValue.replace(new RegExp(searchString, 'g'), replacement);
-            attribute.value(newValue);
+    // Ensure it's an array of Nodes
+    const nodeArray = Array.isArray(nodes) ? nodes.filter(n => n instanceof XmlNode) as XmlNode[] : [];
+
+    // Replace the attribute value for each matching element
+    for (const node of nodeArray) {
+        if (node.nodeType === 1) { // Node.ELEMENT_NODE (ensures it's an Element)
+            const element = node as Element;
+            const attrValue = element.getAttribute(attributeName);
+
+            if (attrValue && attrValue.includes(searchString)) {
+                const newValue = attrValue.replace(new RegExp(searchString, 'g'), replacement);
+                element.setAttribute(attributeName, newValue);
+            }
         }
     }
 }
 
-function addAccessibilityAssessment(parent: Element, wcb: string, cs: string, parentId: string) {
+function addAccessibilityAssessment(
+    parent: Element,
+    wcb: string,
+    cs: string,
+    parentId: string
+): void {
     let value = 'unknown';
-    if (wcb === "1") {
+
+    // Map wheelchair boarding values to accessibility values
+    if (wcb === '1') {
         value = 'partial';
-    } else if (wcb === "2") {
+    } else if (wcb === '2') {
         value = 'false';
     }
-    const aa = parent.node('AccessibilityAssessment')
-        .attr('version', '1')
-        .attr('id', cs + 'AccessibilityAssessment:' + parentId);
-    aa.node('MobilityImpairedAccess', value);
-    const limitations = aa.node('limitations');
-    const al = limitations.node('AccessibilityLimitation');
-    al.node('WheelchairAccess', value);
-    al.node('StepFreeAccess', value);
+
+    const doc = parent.ownerDocument!;
+
+    // Create the AccessibilityAssessment element
+    const accessibilityAssessment = doc.createElement('AccessibilityAssessment');
+    accessibilityAssessment.setAttribute('version', '1');
+    accessibilityAssessment.setAttribute('id', `${cs}AccessibilityAssessment:${parentId}`);
+
+    // Create and append MobilityImpairedAccess element
+    const mobilityImpairedAccess = doc.createElement('MobilityImpairedAccess');
+    mobilityImpairedAccess.textContent = value;
+    accessibilityAssessment.appendChild(mobilityImpairedAccess);
+
+    // Create limitations -> AccessibilityLimitation elements
+    const limitations = doc.createElement('limitations');
+    const accessibilityLimitation = doc.createElement('AccessibilityLimitation');
+
+    const wheelchairAccess = doc.createElement('WheelchairAccess');
+    wheelchairAccess.textContent = value;
+    accessibilityLimitation.appendChild(wheelchairAccess);
+
+    const stepFreeAccess = doc.createElement('StepFreeAccess');
+    stepFreeAccess.textContent = value;
+    accessibilityLimitation.appendChild(stepFreeAccess);
+
+    limitations.appendChild(accessibilityLimitation);
+    accessibilityAssessment.appendChild(limitations);
+
+    // Append AccessibilityAssessment to the parent element
+    parent.appendChild(accessibilityAssessment);
 }
 
 // Function to generate a translations map
@@ -282,16 +327,21 @@ function getTranslationsMap(
 }
 
 function writeXmlDocToFile(xmlDoc: Document, outputPath: string, filename: string): void {
-    const xmlString = xmlDoc.toString();
+    const xmlSerializer = new XMLSerializer();
+    let xmlString = xmlSerializer.serializeToString(xmlDoc);
+
+    xmlString = `<?xml version="1.0" encoding="UTF-8"?>\n` + xmlString;
+    xmlString = xmlFormat(xmlString, { collapseContent: true, indentation: '  ' });
+
     const filePath = `${outputPath}/${filename}`;
 
     // Ensure the output directory exists
     if (!fs.existsSync(outputPath)) {
-        fs.mkdirSync(outputPath, {recursive: true});
+        fs.mkdirSync(outputPath, { recursive: true });
     }
 
-    // Write the xmlDoc to the file
-    writeFile(filePath, xmlString);
+    // Write the prettified XML string to the file
+    fs.writeFileSync(filePath, xmlString, 'utf8');
 }
 
 function writeStatsToFile(stats: Stats, outputPath: string, filename: string): void {
@@ -321,51 +371,105 @@ function writeFile(filePath: string, data: string, encoding: BufferEncoding = 'u
     }
 }
 
-function createDestinationDisplayForTrip(destinationDisplays: Element, cs: string, trip: Trip, translationsMap: Record<string, Record<string, string>>) {
-    const destinationDisplay = destinationDisplays
-        .node('DestinationDisplay')
-        .attr({version: '1', id: cs + 'DestinationDisplay:' + normalizeGtfsId(trip.trip_headsign)});
+function createDestinationDisplayForTrip(
+    destinationDisplays: Element,
+    cs: string,
+    trip: Trip,
+    translationsMap: Record<string, Record<string, string>>
+): Element {
+    // Normalize the headsign ID
+    const normalizedId = normalizeGtfsId(trip.trip_headsign);
+    const destinationDisplayId = `${cs}DestinationDisplay:${normalizedId}`;
 
-    // Include translated headsign if available
+    const doc = destinationDisplays.ownerDocument!;
+
+    // Create the DestinationDisplay element
+    const destinationDisplay = doc.createElement('DestinationDisplay');
+    destinationDisplay.setAttribute('version', '1');
+    destinationDisplay.setAttribute('id', destinationDisplayId);
+
+    // Include translated headsigns if available
     const translations = translationsMap[trip.trip_id];
     if (translations) {
-        const alternativeTexts = destinationDisplay.node('alternativeTexts');
-        for (const language in translationsMap[trip.trip_id]) {
-            const translatedName = translationsMap[trip.trip_id][language];
-            const alternativeText = alternativeTexts.node('AlternativeText');
-            alternativeText.attr({attributeName: 'FrontText'});
-            alternativeText.attr({id: cs + 'AlternativeText:Trip_' + normalizeGtfsId(trip.trip_headsign) + "_" + language});
-            const text = alternativeText.node('Text');
-            text.attr({lang: language});
-            text.text(translatedName);
+        const alternativeTexts = doc.createElement('alternativeTexts');
+        for (const language in translations) {
+            const translatedName = translations[language];
+            const alternativeText = doc.createElement('AlternativeText');
+            alternativeText.setAttribute('attributeName', 'FrontText');
+            alternativeText.setAttribute(
+                'id',
+                `${cs}AlternativeText:Trip_${normalizedId}_${language}`
+            );
+
+            const text = doc.createElement('Text');
+            text.setAttribute('lang', language);
+            text.appendChild(doc.createTextNode(translatedName));
+
+            alternativeText.appendChild(text);
+            alternativeTexts.appendChild(alternativeText);
         }
+        destinationDisplay.appendChild(alternativeTexts);
     }
 
-    destinationDisplay.node('FrontText').text(trip.trip_headsign);
+    // Add the FrontText node
+    const frontText = doc.createElement('FrontText');
+    frontText.appendChild(doc.createTextNode(trip.trip_headsign));
+    destinationDisplay.appendChild(frontText);
+
+    // Append the DestinationDisplay to the parent element
+    destinationDisplays.appendChild(destinationDisplay);
+
     return destinationDisplay;
 }
 
-function createDestinationDisplayForStopTime(destinationDisplays: Element, cs: string, stopTime: StopTime, translationsMap: Record<string, Record<string, string>>) {
-    const destinationDisplay = destinationDisplays
-        .node('DestinationDisplay')
-        .attr({version: '1', id: cs + 'DestinationDisplay:' + normalizeGtfsId(stopTime.stop_headsign)});
+function createDestinationDisplayForStopTime(
+    destinationDisplays: Element,
+    cs: string,
+    stopTime: StopTime,
+    translationsMap: Record<string, Record<string, string>>
+): Element {
+    // Normalize the headsign ID
+    const normalizedId = normalizeGtfsId(stopTime.stop_headsign);
+    const destinationDisplayId = `${cs}DestinationDisplay:${normalizedId}`;
 
-    // Include translated headsign if available
+    const doc = destinationDisplays.ownerDocument!;
+
+    // Create the DestinationDisplay element
+    const destinationDisplay = doc.createElement('DestinationDisplay');
+    destinationDisplay.setAttribute('version', '1');
+    destinationDisplay.setAttribute('id', destinationDisplayId);
+
+    // Include translated headsigns if available
     const translations = translationsMap[stopTime.trip_id];
     if (translations) {
-        const alternativeTexts = destinationDisplay.node('alternativeTexts');
-        for (const language in translationsMap[stopTime.trip_id]) {
-            const translatedName = translationsMap[stopTime.trip_id][language];
-            const alternativeText = alternativeTexts.node('AlternativeText');
-            alternativeText.attr({attributeName: 'FrontText'});
-            alternativeText.attr({id: cs + 'AlternativeText:StopTime_' + normalizeGtfsId(stopTime.stop_headsign) + "_" + language});
-            const text = alternativeText.node('Text');
-            text.attr({lang: language});
-            text.text(translatedName);
+        const alternativeTexts = doc.createElement('alternativeTexts');
+        for (const language in translations) {
+            const translatedName = translations[language];
+            const alternativeText = doc.createElement('AlternativeText');
+            alternativeText.setAttribute('attributeName', 'FrontText');
+            alternativeText.setAttribute(
+                'id',
+                `${cs}AlternativeText:StopTime_${normalizedId}_${language}`
+            );
+
+            const text = doc.createElement('Text');
+            text.setAttribute('lang', language);
+            text.appendChild(doc.createTextNode(translatedName));
+
+            alternativeText.appendChild(text);
+            alternativeTexts.appendChild(alternativeText);
         }
+        destinationDisplay.appendChild(alternativeTexts);
     }
 
-    destinationDisplay.node('FrontText').text(stopTime.stop_headsign);
+    // Add the FrontText node
+    const frontText = doc.createElement('FrontText');
+    frontText.appendChild(doc.createTextNode(stopTime.stop_headsign));
+    destinationDisplay.appendChild(frontText);
+
+    // Append the DestinationDisplay to the parent element
+    destinationDisplays.appendChild(destinationDisplay);
+
     return destinationDisplay;
 }
 
@@ -381,59 +485,131 @@ function setTransportModeWithPriority(
     gtfsRouteType: number,
     cs: string
 ): void {
+    const doc = stopPlace.ownerDocument!;
+
     // Convert GTFS route type to NeTEx transport mode
     const netexTransportMode = getTransportMode(gtfsRouteType);
 
-    // Check if the StopPlace already has a primary mode set
-    const existingTransportModeElement = stopPlace.get('TransportMode') as Element;
-    const existingTransportMode = existingTransportModeElement?.text();
+    // Find or create the TransportMode element
+    let transportModeElement = getElementFromElement('TransportMode', stopPlace);
+    if (!transportModeElement) {
+        transportModeElement = doc.createElement('TransportMode');
+        transportModeElement.appendChild(doc.createTextNode(netexTransportMode));
+        stopPlace.appendChild(transportModeElement);
 
-    if (!existingTransportMode) {
-        // No primary mode set yet, use the current mode as the primary mode
-        stopPlace.node('TransportMode').text(netexTransportMode);
-        stopPlace.node('StopPlaceType').text(getStopPlaceType(gtfsRouteType)); // Set StopPlaceType based on primary mode
-    } else {
-        const existingPriority = getTransportModePriority(existingTransportMode);
-        const currentPriority = getTransportModePriority(netexTransportMode);
+        // Add StopPlaceType since this is the primary mode
+        const stopPlaceTypeElement = doc.createElement('StopPlaceType');
+        stopPlaceTypeElement.appendChild(doc.createTextNode(getStopPlaceType(gtfsRouteType)));
+        stopPlace.appendChild(stopPlaceTypeElement);
 
-        if (currentPriority < existingPriority) {
-            // Current mode has a higher priority, so make it the primary mode
-            existingTransportModeElement.text(netexTransportMode); // Update primary mode to current
-            (stopPlace.get('StopPlaceType') as Element)?.text(getStopPlaceType(gtfsRouteType)); // Update StopPlaceType to match new primary mode
+        return; // Exit since the primary mode has been set
+    }
 
-            // Move existing primary mode to OtherTransportModes
-            updateOtherTransportModes(stopPlace, existingTransportMode);
-        } else if (netexTransportMode !== existingTransportMode) {
-            // If the current mode is different from the existing primary mode
-            // and doesn't have a higher priority, add it to OtherTransportModes
-            updateOtherTransportModes(stopPlace, netexTransportMode);
+    // Get the existing primary mode and its priority
+    const existingTransportMode = transportModeElement.textContent || '';
+    const existingPriority = getTransportModePriority(existingTransportMode);
+    const currentPriority = getTransportModePriority(netexTransportMode);
+
+    if (currentPriority < existingPriority) {
+        // Update primary TransportMode
+        transportModeElement.textContent = netexTransportMode;
+
+        // Update StopPlaceType based on the new primary mode
+        let stopPlaceTypeElement = getElementFromElement('StopPlaceType', stopPlace);
+        if (!stopPlaceTypeElement) {
+            stopPlaceTypeElement = doc.createElement('StopPlaceType');
+            stopPlace.appendChild(stopPlaceTypeElement);
         }
+        stopPlaceTypeElement.textContent = getStopPlaceType(gtfsRouteType);
+
+        // Move the old primary mode to OtherTransportModes
+        updateOtherTransportModes(stopPlace, existingTransportMode);
+    } else if (netexTransportMode !== existingTransportMode) {
+        // Add the current mode to OtherTransportModes if it's not the primary
+        updateOtherTransportModes(stopPlace, netexTransportMode);
     }
 }
 
-
-// Helper function to update OtherTransportModes and place it after TransportMode
 function updateOtherTransportModes(stopPlace: Element, modeToAdd: string): void {
-    // Remove any existing OtherTransportModes element to ensure it’s fresh
-    const existingOtherTransportModesElement = stopPlace.get('OtherTransportModes') as Element;
+    const doc = stopPlace.ownerDocument!;
+
+    // Find the existing OtherTransportModes element
+    let existingOtherTransportModesElement = getElementFromElement('OtherTransportModes', stopPlace);
+
+    // Collect modes from the existing OtherTransportModes element
+    const otherModes = new Set<string>();
     if (existingOtherTransportModesElement) {
-        existingOtherTransportModesElement.remove();
+        const existingModes = existingOtherTransportModesElement.textContent || '';
+        existingModes.split(' ').filter(Boolean).forEach(mode => otherModes.add(mode));
+
+        // Remove the existing OtherTransportModes element
+        stopPlace.removeChild(existingOtherTransportModesElement);
     }
 
-    // Collect the modes to be placed in OtherTransportModes
-    let otherModes = new Set<string>();
-    if (existingOtherTransportModesElement) {
-        otherModes = new Set(existingOtherTransportModesElement.text().split(' ').filter(Boolean));
-    }
+    // Add the new mode to the set
     otherModes.add(modeToAdd);
 
-    // Create a new OtherTransportModes element directly after TransportMode
-    const transportModeElement = stopPlace.get('TransportMode') as Element;
-    const otherTransportModesElement = stopPlace.node('OtherTransportModes');
-    otherTransportModesElement.text(Array.from(otherModes).join(' '));
+    // Re-create OtherTransportModes element with updated content
+    const newOtherTransportModesElement = doc.createElement('OtherTransportModes');
+    newOtherTransportModesElement.textContent = Array.from(otherModes).join(' ');
 
-    // Reorder the node so that OtherTransportModes is right after TransportMode
-    transportModeElement.addNextSibling(otherTransportModesElement);
+    // Find the TransportMode element
+    const transportModeElement = getElementFromElement('TransportMode', stopPlace);
+
+    // Insert OtherTransportModes right after TransportMode
+    if (transportModeElement?.nextSibling) {
+        stopPlace.insertBefore(newOtherTransportModesElement, transportModeElement.nextSibling);
+    } else {
+        stopPlace.appendChild(newOtherTransportModesElement);
+    }
+}
+
+// Safely get a single Element from a Document
+function getElementFromDocument(expression: string, doc: Document): Element | null {
+    // @ts-ignore
+    const result = xpath.select1(expression, doc as unknown as Node); // Cast to Node
+    return result instanceof Element ? result : null;
+}
+
+// Safely get a single Element from an Element
+function getElementFromElement(expression: string, element: Element): Element | null {
+    // @ts-ignore
+    const result = xpath.select1(expression, element as unknown as Node); // Cast to Node
+    return result instanceof Element ? result : null;
+}
+
+// Safely get a single Element from a Node
+function getElementFromNode(expression: string, node: XmlNode): Element | null {
+    // @ts-ignore
+    const result = xpath.select1(expression, node as unknown as Node); // Explicitly cast as Node
+    return result instanceof Element ? result : null;
+}
+
+// Safely get multiple Elements from a Node
+function getElementsFromNode(expression: string, node: XmlNode): Element[] {
+    // @ts-ignore
+    const results = xpath.select(expression, node as unknown as Node);
+
+    if (!results) return [];
+
+    // Ensure the result is an array and filter Elements, then assert type as Element[]
+    return (Array.isArray(results)
+        ? results.filter((item) => item instanceof Element)
+        : []) as Element[];
+}
+
+function getCountFromXPath(expression: string, doc: Document): number {
+    const result = xpath.select(expression, doc as unknown as Node); // Cast Document to Node
+
+    if (typeof result === 'number') {
+        return result;
+    } else if (typeof result === 'string') {
+        return parseFloat(result); // Convert string result to number
+    } else if (Array.isArray(result) && result.length === 1 && typeof result[0] === 'number') {
+        return result[0];
+    }
+
+    throw new Error(`Unexpected result type for XPath count expression: ${expression}`);
 }
 
 function normalizeGtfsId(id: string): string {
@@ -466,5 +642,10 @@ export {
     createDestinationDisplayForTrip,
     createDestinationDisplayForStopTime,
     setTransportModeWithPriority,
-    normalizeGtfsId
+    normalizeGtfsId,
+    getElementFromDocument,
+    getElementFromElement,
+    getElementFromNode,
+    getElementsFromNode,
+    getCountFromXPath
 };

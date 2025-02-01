@@ -16,7 +16,7 @@
   "devDependencies": {
     "@types/chai": "^4.2.14",
     "@types/haversine": "^1.1.4",
-    "@types/lodash": "^4.14.172",
+    "@types/lodash": "^4.17.15",
     "@types/mocha": "^10.0.8",
     "@types/node": "^22.0.2",
     "@types/vkbeautify": "^0.99.4",
@@ -48,7 +48,7 @@
     "@types/geokdbush": "^1.1.2",
     "@types/kdbush": "^3.0.0",
     "@types/libxmljs": "^0.18.8",
-    "@types/lodash": "^4.14.165",
+    "@types/lodash": "^4.17.15",
     "@types/luxon": "^3.4.2",
     "@types/ngeohash": "0.6.8",
     "@types/pg": "^8.11.2",

@@ -7,6 +7,11 @@ updates:
     reviewers:
       - "tmfg/digitraffic-tis-solita"
       - "peteras"
+    groups:
+      dev-deps:
+        dependency-type: "development"
+      prod-deps:
+        dependency-type: "production"
   # keep used GitHub Actions up to date
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -15,3 +20,7 @@ updates:
     reviewers:
       - "tmfg/digitraffic-tis-solita"
       - "peteras"
+    groups:
+      actions-deps:
+        patterns:
+          - "*"

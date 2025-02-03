@@ -30,17 +30,6 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Check if Actor is a Member of one of the teams
-        uses: im-open/is-actor-team-member@v1.2.0
-        with:
-          github-actor: ${{ github.actor }}
-          github-organization: tmfg
-          github-team-slugs: |
-            ["digitraffic-tis-solita"]
-          github-usernames: |
-            ["dependabot[bot]", "peteras"]
-          github-token: ${{ secrets.ORG_MEMBER_READ }}
-
       - name: Log in to the Container registry
         uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567
         with:

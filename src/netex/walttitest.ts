@@ -40,7 +40,7 @@ const downloadAndConvert = async (authority: { id: string; name: string }) => {
         const writer = fs.createWriteStream(gtfsFilePath);
         response.data.pipe(writer);
         await new Promise((resolve, reject) => {
-            writer.on('finish', resolve);
+            writer.on('finish', () => resolve(undefined));
             writer.on('error', reject);
         });
 

@@ -11,7 +11,7 @@
   "main": "converter.js",
   "scripts": {
     "build": "del-cli ./build && tsc",
-    "convert": "node --max-old-space-size=8192 build/netex/converter.js"
+    "convert": "node --expose-gc --max-old-space-size=18432 build/netex/converter.js"
   },
   "devDependencies": {
     "@types/chai": "^5.0.1",

@@ -49,15 +49,15 @@
     "@types/kdbush": "^3.0.0",
     "@types/libxmljs": "^0.18.13",
     "@types/lodash": "^4.17.16",
-    "@types/luxon": "^3.4.2",
+    "@types/luxon": "^3.6.0",
     "@types/ngeohash": "0.6.8",
     "@types/pg": "^8.11.11",
     "@xmldom/xmldom": "^0.9.8",
     "commander": "^13.1.0",
     "dotenv": "^16.4.7",
-    "ts-luxon": "^5.0.6",
+    "ts-luxon": "^6.0.0",
     "winston-daily-rotate-file": "5.0.0",
-    "xml-formatter": "^3.6.4",
+    "xml-formatter": "^3.6.5",
     "xpath": "^0.0.34"
   },
   "overrides": {

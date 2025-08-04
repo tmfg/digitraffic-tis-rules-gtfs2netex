@@ -4,9 +4,6 @@ updates:
     directory: '/'
     schedule:
       interval: 'monthly'
-    reviewers:
-      - "tmfg/digitraffic-tis-solita"
-      - "peteras"
     groups:
       dev-deps:
         dependency-type: "development"
@@ -17,9 +14,6 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
-    reviewers:
-      - "tmfg/digitraffic-tis-solita"
-      - "peteras"
     groups:
       actions-deps:
         patterns:

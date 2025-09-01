@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout project files
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -59,7 +59,7 @@ jobs:
           echo "VERSION_STRING=$(npm version ${{ env.VERSION_ADJUSTMENT }} --git-tag-version=false)" >> $GITHUB_ENV
 
       - name: Commit version adjustments
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v6
         with:
           commit_message: Update project version to ${{ env.VERSION_STRING }} (${{ env.VERSION_ADJUSTMENT }}) [skip ci]
           commit_user_name: Fintraffic GitHub Actions Bot

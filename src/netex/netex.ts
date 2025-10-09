@@ -25,7 +25,11 @@ import {
     normalizeGtfsId,
     getElementFromElement,
     getElementFromDocument,
-    getCountFromXPath
+    getCountFromXPath,
+    addCompositeFrameValidity,
+    ensureAuthorityInResourceFrame,
+    ensureFallbackDayType,
+    buildStopPointInJourneyPatternId, normalizeServiceId, formatTime
 
 } from "./utils";
 import { createDayTypesForRoute } from "./daytypes";
@@ -59,12 +63,16 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string, stopsOnly: boolean = fal
         const resourceFrame = getElementFromDocument('//ResourceFrame', xmlDoc) as Element;
         const serviceCalendarFrame = getElementFromDocument('//ServiceCalendarFrame', xmlDoc) as Element;
         const organisations = getElementFromElement('organisations', resourceFrame) as Element;
+        const compositeFrame = getElementFromDocument('//CompositeFrame', xmlDoc) as Element;
+        const cs = getCodeSpaceForAgency(agency, feedInfo as FeedInfo);
+        addCompositeFrameValidity(xmlDoc, compositeFrame, gtfs, cs);
 
+        const networkId = fillNetwork(xmlDoc, serviceFrame, resourceFrame, agency, feedInfo as FeedInfo);
         createNetexStops(gtfs, xmlDoc, route, stopIndex, stoptimesIndex, stopPlacesMap);
 
         if (!stopsOnly) {
             const operator = createNetexOperatorFromGtfsRoute(gtfs, organisations, route);
-            const line = createNetexLineFromGtfsRoute(gtfs, serviceFrame, route);
+            const line = createNetexLineFromGtfsRoute(gtfs, serviceFrame, route, networkId);
             createNetexRouteFromGtfsRoute(gtfs, serviceFrame, route, stopIndex, stoptimesIndex);
             const dayTypes = createDayTypesForRoute(gtfs, serviceCalendarFrame, route, agency);
             createNetexJourneys(gtfs, xmlDoc, route, dayTypes, operator, line, agency, feedInfo as FeedInfo, stoptimesIndex, stats);
@@ -221,6 +229,7 @@ function createNetexDocumentTemplate(stopsOnly: boolean): Document {
     serviceFrame.setAttribute('version', '1');
     frames.appendChild(serviceFrame);
 
+    serviceFrame.appendChild(xmlDoc.createElement('Network'));
     serviceFrame.appendChild(xmlDoc.createElement('routePoints'));
     serviceFrame.appendChild(xmlDoc.createElement('routes'));
     serviceFrame.appendChild(xmlDoc.createElement('lines'));
@@ -243,6 +252,58 @@ function createNetexDocumentTemplate(stopsOnly: boolean): Document {
     return xmlDoc;
 }
 
+function fillNetwork(
+    xmlDoc: Document,
+    serviceFrame: Element,
+    resourceFrame: Element,
+    agency: Agency,
+    feedInfo: FeedInfo
+): string {
+    const cs = getCodeSpaceForAgency(agency, feedInfo); // e.g., "FIN:"
+    const networkId = `${cs}Network:${normalizeGtfsId(agency.agency_id || agency.agency_name || 'default')}`;
+
+    // Ensure <Authority> exists in resource frame
+    const authorityId = ensureAuthorityInResourceFrame(xmlDoc, resourceFrame, agency, cs);
+
+    // Ensure <Network> exists in <ServiceFrame>
+    let network = serviceFrame.getElementsByTagName('Network')[0] as Element | undefined;
+    if (!network) {
+        network = xmlDoc.createElement('Network');
+        serviceFrame.insertBefore(network, serviceFrame.firstChild); // place early in ServiceFrame
+    }
+
+    // Ensure Network has ID + version
+    if (!network.getAttribute('id')) {
+        network.setAttribute('id', networkId);
+    }
+    if (!network.getAttribute('version')) {
+        network.setAttribute('version', '1');
+    }
+
+    // Ensure <Name>
+    let nameEl = network.getElementsByTagName('Name')[0];
+    if (!nameEl) {
+        nameEl = xmlDoc.createElement('Name');
+        network.insertBefore(nameEl, network.firstChild);
+    }
+    nameEl.textContent = agency.agency_name || 'Default Network';
+
+    // Ensure <AuthorityRef>
+    let authorityRef = network.getElementsByTagName('AuthorityRef')[0];
+    if (!authorityRef) {
+        authorityRef = xmlDoc.createElement('AuthorityRef');
+        network.appendChild(authorityRef);
+    }
+    if (!authorityRef.getAttribute('ref')) {
+        authorityRef.setAttribute('ref', authorityId);
+    }
+    if (!authorityRef.getAttribute('version')) {
+        authorityRef.setAttribute('version', '1');
+    }
+
+    return networkId; // Use this in <Line><RepresentedByGroupRef ref="..."/>
+}
+
 function createNetexOperatorFromGtfsRoute(gtfs: Gtfs, parent: Element, gtfsRoute: Route): Element {
     const agency = findAgencyForId(gtfs, gtfsRoute.agency_id);
 
@@ -261,7 +322,8 @@ function createNetexOperatorFromGtfsRoute(gtfs: Gtfs, parent: Element, gtfsRoute
 function createNetexLineFromGtfsRoute(
     gtfs: Gtfs,
     parent: Element,
-    gtfsRoute: Route
+    gtfsRoute: Route,
+    networkId: string
 ): Element {
     const agency = findAgencyForId(gtfs, gtfsRoute.agency_id);
     const feedInfo = gtfs.feed_info && gtfs.feed_info[0];
@@ -319,6 +381,12 @@ function createNetexLineFromGtfsRoute(
     operatorRef.setAttribute('ref', getNetexOperatorId(findAgencyForId(gtfs, gtfsRoute.agency_id)));
     operatorRef.setAttribute('version', '1');
 
+    // Set RepresentedByGroupRef to link to Network
+    const reprRef = parent.ownerDocument!.createElement('RepresentedByGroupRef');
+    reprRef.setAttribute('ref', networkId); // networkId must match the <Network id="...">
+    reprRef.setAttribute('version', '1');
+    lineElement.appendChild(reprRef);
+
     return lineElement; // Return the Line element
 }
 
@@ -336,7 +404,7 @@ function createNetexRouteFromGtfsRoute(
     // Ensure routes container exists
     const routes = getElementFromElement('routes', parent) || parent.appendChild(parent.ownerDocument!.createElement('routes')) as Element;
 
-    const routeId = `${cs}Route:${gtfsRoute.route_id}`;
+    const routeId = `${cs}Route:${normalizeGtfsId(gtfsRoute.route_id)}`;
     const routeElement = routes.appendChild(parent.ownerDocument!.createElement('Route')) as Element;
     routeElement.setAttribute('id', routeId);
     routeElement.setAttribute('version', '1');
@@ -526,10 +594,18 @@ function createNetexStops(
                 stopAssignment.setAttribute('id', `${cs}StopAssignment:${stop.stop_id}`);
                 stopAssignment.setAttribute('version', '1');
                 stopAssignment.setAttribute('order', (i + 1).toString());
-                (stopAssignment.appendChild(xmlDoc.createElement('ScheduledStopPointRef')) as Element).setAttribute('ref', scheduledStopPointId);
-                (stopAssignment.appendChild(xmlDoc.createElement('StopPlaceRef')) as Element).setAttribute('ref', stopPlaceId);
-                (stopAssignment.appendChild(xmlDoc.createElement('QuayRef')) as Element).setAttribute('ref', quayId);
 
+                const scheduledRef = stopAssignment.appendChild(xmlDoc.createElement('ScheduledStopPointRef')) as Element;
+                scheduledRef.setAttribute('ref', scheduledStopPointId);
+                scheduledRef.setAttribute('version', '1');
+
+                const stopPlaceRefEl = stopAssignment.appendChild(xmlDoc.createElement('StopPlaceRef')) as Element;
+                stopPlaceRefEl.setAttribute('ref', stopPlaceId);
+                stopPlaceRefEl.setAttribute('version', '1');
+
+                const quayRefEl = stopAssignment.appendChild(xmlDoc.createElement('QuayRef')) as Element;
+                quayRefEl.setAttribute('ref', quayId);
+                quayRefEl.setAttribute('version', '1');
 
                 const routePointId = `${cs}RoutePoint:${stop.stop_id}`;
                 const routePoint = routePoints.appendChild(xmlDoc.createElement('RoutePoint')) as Element;
@@ -643,7 +719,6 @@ function createNetexJourneys(
 ) {
     const timetableFrame = getElementFromDocument('//TimetableFrame', xmlDoc);
     const serviceFrame = getElementFromDocument('//ServiceFrame', xmlDoc);
-
     if (!timetableFrame || !serviceFrame) {
         throw new Error('Required elements TimetableFrame or ServiceFrame not found.');
     }
@@ -664,54 +739,82 @@ function createNetexJourneys(
 
     for (const trip of trips) {
         const stopTimes = findStopTimesForTripId(stoptimesIndex, trip.trip_id);
-        const stopIds = stopTimes.map((st) => st.stop_id);
+
+        // Build a normalized key for journey pattern grouping
+        const stopIds = stopTimes.map((st) => normalizeGtfsId(st.stop_id));
         const key = stopIds.join(',');
 
         let journeyPattern = journeyPatternsMap[key];
 
-        if (trip.trip_headsign && !destinationDisplaysMap[trip.trip_headsign]) {
-            destinationDisplaysMap[trip.trip_headsign] = createDestinationDisplayForTrip(destinationDisplays as Element, cs, trip, tripHeadsignTranslationsMap);
+        // Ensure DestinationDisplay for trip headsign (if any)
+        if (trip.trip_headsign) {
+            const headsignNorm = normalizeGtfsId(trip.trip_headsign);
+            const ddId = `${cs}DestinationDisplay:${headsignNorm}`;
+
+            if (!destinationDisplaysMap[ddId]) {
+                destinationDisplaysMap[ddId] =
+                    createDestinationDisplayForTrip(destinationDisplays as Element, cs, trip, tripHeadsignTranslationsMap, ddId);
+            }
         }
 
+        // Create JourneyPattern for this stop sequence (if not already present)
         if (!journeyPattern) {
+            // Use normalized key to build a reproducible id for the pattern
+            const jpId = `${cs}JourneyPattern:${normalizeGtfsId(trip.trip_id)}`;
+
             journeyPattern = journeyPatterns.appendChild(xmlDoc.createElement('JourneyPattern')) as Element;
-            journeyPattern.setAttribute('id', `${cs}JourneyPattern:${trip.trip_id}`);
+            journeyPattern.setAttribute('id', jpId);
             journeyPattern.setAttribute('version', '1');
+
+            // Ensure JourneyPattern refers to the Route
+            const routeRef = xmlDoc.createElement('RouteRef');
+            routeRef.setAttribute('ref', `${cs}Route:${normalizeGtfsId(gtfsRoute.route_id)}`);
+            routeRef.setAttribute('version', '1');
+            journeyPattern.appendChild(routeRef);
 
             const pis = journeyPattern.appendChild(xmlDoc.createElement('pointsInSequence')) as Element;
 
-            let previousHeadsign = '';
+            let previousDisplayRef: string | null = null;
             for (let i = 0; i < stopTimes.length; i++) {
                 const stopTime = stopTimes[i];
-                const stopPointId = `${cs}StopPointInJourneyPattern:${trip.trip_id}:${stopTime.stop_id}:${i}`;
+
+                const spijpId = buildStopPointInJourneyPatternId(cs, jpId, stopTime.stop_id, i);
+
                 const spijp = pis.appendChild(xmlDoc.createElement('StopPointInJourneyPattern')) as Element;
-                spijp.setAttribute('id', stopPointId);
+                spijp.setAttribute('id', spijpId);
                 spijp.setAttribute('version', '1');
                 spijp.setAttribute('order', (i + 1).toString());
 
-                const scheduledStopPointRef = spijp.appendChild(xmlDoc.createElement('ScheduledStopPointRef')) as Element;
-                scheduledStopPointRef.setAttribute('ref', `${cs}ScheduledStopPoint:${stopTime.stop_id}`);
-                scheduledStopPointRef.setAttribute('version', '1');
+                const sspRef = spijp.appendChild(xmlDoc.createElement('ScheduledStopPointRef')) as Element;
+                sspRef.setAttribute('ref', `${cs}ScheduledStopPoint:${normalizeGtfsId(stopTime.stop_id)}`);
+                sspRef.setAttribute('version', '1');
 
-                if (i === 0) {
-                    spijp.appendChild(xmlDoc.createElement('ForAlighting')).textContent = 'false';
-                }
+                if (i === 0) spijp.appendChild(xmlDoc.createElement('ForAlighting')).textContent = 'false';
+                if (i === stopTimes.length - 1) spijp.appendChild(xmlDoc.createElement('ForBoarding')).textContent = 'false';
 
-                if (i === stopTimes.length - 1) {
-                    spijp.appendChild(xmlDoc.createElement('ForBoarding')).textContent = 'false';
-                }
+                const headsign = stopTime.stop_headsign || trip.trip_headsign || 'unknown';
+                const headsignNorm = normalizeGtfsId(headsign);
+                const ddId = `${cs}DestinationDisplay:${headsignNorm}`;
+                const isLastStop = (i === stopTimes.length - 1);
 
-                const headsign = stopTime.stop_headsign || trip.trip_headsign;
-
-                if (headsign && (i === 0 || headsign !== previousHeadsign)) {
-                    if (!destinationDisplaysMap[headsign]) {
-                        destinationDisplaysMap[headsign] = createDestinationDisplayForStopTime(destinationDisplays as Element, cs, stopTime, stopTimesHeadsignTranslationsMap);
+                // Always ensure a DestinationDisplayRef on the first SPiJP if we have a headsign
+                if (!isLastStop && (i === 0 || ddId !== previousDisplayRef)) {
+                    if (!destinationDisplaysMap[ddId]) {
+                        destinationDisplaysMap[ddId] =
+                            createDestinationDisplayForStopTime(
+                                destinationDisplays as Element,
+                                cs,
+                                stopTime,
+                                stopTimesHeadsignTranslationsMap,
+                                ddId
+                            );
                     }
 
-                    const destinationDisplayRef = spijp.appendChild(xmlDoc.createElement('DestinationDisplayRef')) as Element;
-                    destinationDisplayRef.setAttribute('version', '1');
-                    destinationDisplayRef.setAttribute('ref', `${cs}DestinationDisplay:${normalizeGtfsId(headsign)}`);
-                    previousHeadsign = headsign;
+                    const ddRef = spijp.appendChild(xmlDoc.createElement('DestinationDisplayRef')) as Element;
+                    ddRef.setAttribute('version', '1');
+                    ddRef.setAttribute('ref', ddId);
+
+                    previousDisplayRef = ddId;
                 }
             }
 
@@ -719,7 +822,7 @@ function createNetexJourneys(
                 const linksInSequence = journeyPattern.appendChild(xmlDoc.createElement('linksInSequence')) as Element;
                 const slijp = linksInSequence.appendChild(xmlDoc.createElement('ServiceLinkInJourneyPattern')) as Element;
                 slijp.setAttribute('version', '1');
-                slijp.setAttribute('id', `${cs}ServiceLinkInJourneyPattern:${trip.trip_id}`);
+                slijp.setAttribute('id', `${cs}ServiceLinkInJourneyPattern:${normalizeGtfsId(trip.trip_id)}`);
                 slijp.setAttribute('order', '1');
                 const serviceLinkRef = slijp.appendChild(xmlDoc.createElement('ServiceLinkRef')) as Element;
                 serviceLinkRef.setAttribute('version', '1');
@@ -730,16 +833,32 @@ function createNetexJourneys(
             stats.JourneyPatterns++;
         }
 
+        // Create ServiceJourney
         const serviceJourney = vehicleJourneys.appendChild(xmlDoc.createElement('ServiceJourney')) as Element;
-        serviceJourney.setAttribute('id', `${cs}ServiceJourney:${trip.trip_id}`);
+        serviceJourney.setAttribute('id', `${cs}ServiceJourney:${normalizeGtfsId(trip.trip_id)}`);
         serviceJourney.setAttribute('version', '1');
         serviceJourney.appendChild(xmlDoc.createElement('Name')).textContent = gtfsRoute.route_short_name;
 
         addAccessibilityAssessment(serviceJourney, trip.wheelchair_accessible?.toString(), cs, `ServiceJourney_${trip.trip_id}`);
 
+        // Proper normalized lookup for DayType
+        const serviceIdNorm = normalizeServiceId(trip.service_id);
+        const dayTypeEl = dayTypes[serviceIdNorm];
+
         const dayTypesNode = serviceJourney.appendChild(xmlDoc.createElement('dayTypes'));
         const dayTypeRef = dayTypesNode.appendChild(xmlDoc.createElement('DayTypeRef')) as Element;
-        dayTypeRef.setAttribute('ref', dayTypes[trip.service_id]?.getAttribute('id') || 'UNKNOWN');
+
+        if (dayTypeEl) {
+            dayTypeRef.setAttribute('ref', dayTypeEl.getAttribute('id') || 'UNKNOWN');
+        } else {
+            const fallbackDayType = ensureFallbackDayType(xmlDoc, cs);
+            dayTypeRef.setAttribute('ref', fallbackDayType.getAttribute('id') || `${cs}DayType:Default`);
+            console.warn(
+                `GTFS data issue: trip_id=${trip.trip_id} references service_id=${trip.service_id}, ` +
+                `but no matching entry was found in calendar.txt or calendar_dates.txt. ` +
+                `Using fallback DayType (${dayTypeRef.getAttribute('ref')}).`
+            );
+        }
         dayTypeRef.setAttribute('version', '1');
 
         const journeyPatternRef = serviceJourney.appendChild(xmlDoc.createElement('JourneyPatternRef')) as Element;
@@ -757,53 +876,92 @@ function createNetexJourneys(
         const passingTimes = serviceJourney.appendChild(xmlDoc.createElement('passingTimes')) as Element;
 
         for (let i = 0; i < stopTimes.length; i++) {
+            const stopTime = stopTimes[i];
             const tpt = passingTimes.appendChild(xmlDoc.createElement('TimetabledPassingTime')) as Element;
+            const tptId = `${cs}TimetabledPassingTime:${normalizeGtfsId(trip.trip_id)}_${normalizeGtfsId(stopTime.stop_id)}_${i}`;
+            tpt.setAttribute('id', tptId);
             tpt.setAttribute('version', '1');
 
-            const stopTime = stopTimes[i];
-            const tripIdFromJourneyPattern = journeyPattern.getAttribute('id')?.split(':').pop();
-            const stopPointId = `${cs}StopPointInJourneyPattern:${tripIdFromJourneyPattern}:${stopTime.stop_id}:${i}`;
+            const journeyPatternId = journeyPattern.getAttribute('id') || '';
+            const spijpId = buildStopPointInJourneyPatternId(cs, journeyPatternId, stopTime.stop_id, i);
             const spijpRef = tpt.appendChild(xmlDoc.createElement('StopPointInJourneyPatternRef')) as Element;
-            spijpRef.setAttribute('ref', stopPointId);
+            spijpRef.setAttribute('ref', spijpId);
             spijpRef.setAttribute('version', '1');
 
-            const arrivalTime = stopTime.arrival_time;
-            const departureTime = stopTime.departure_time;
+            const isFirst = i === 0;
+            const isLast = i === stopTimes.length - 1;
 
-            if (arrivalTime) {
-                const [arrHours, arrMinutes, arrSeconds] = arrivalTime.split(':').map(Number);
-                if (arrHours > 23) {
-                    const arrDayOffset = Math.floor(arrHours / 24);
-                    const formattedArrTime = `${(arrHours % 24).toString().padStart(2, '0')}:${arrMinutes.toString().padStart(2, '0')}:${arrSeconds.toString().padStart(2, '0')}`;
-                    tpt.appendChild(xmlDoc.createElement('ArrivalTime')).textContent = formattedArrTime;
-                    tpt.appendChild(xmlDoc.createElement('ArrivalDayOffset')).textContent = arrDayOffset.toString();
+            const arrivalRaw = stopTime.arrival_time || null;
+            const departureRaw = stopTime.departure_time || null;
+
+            let writeArrival = false;
+            let writeDeparture = false;
+            let arr: { time: string; dayOffset?: number } | null = null;
+            let dep: { time: string; dayOffset?: number } | null = null;
+
+            if (arrivalRaw) arr = formatTime(arrivalRaw);
+            if (departureRaw) dep = formatTime(departureRaw);
+
+            if (arrivalRaw && departureRaw && arrivalRaw === departureRaw) {
+                if (isLast) {
+                    // Last stop must have ArrivalTime → write only ArrivalTime
+                    writeArrival = true;
+                    writeDeparture = false;
                 } else {
-                    const formattedArrivalTime = `${arrHours.toString().padStart(2, '0')}:${arrMinutes.toString().padStart(2, '0')}:${arrSeconds.toString().padStart(2, '0')}`;
-                    tpt.appendChild(xmlDoc.createElement('ArrivalTime')).textContent = formattedArrivalTime;
+                    // Normal case for identical times → only write DepartureTime
+                    writeArrival = false;
+                    writeDeparture = true;
+                }
+            } else {
+                // Write whatever is available
+                writeArrival = !!arr;
+                writeDeparture = !!dep;
+
+                // Ensure first stop has a DepartureTime
+                if (isFirst && !writeDeparture && writeArrival) {
+                    writeDeparture = true;
+                    dep = arr;
+                }
+
+                // Ensure last stop has an ArrivalTime
+                if (isLast && !writeArrival && writeDeparture) {
+                    writeArrival = true;
+                    arr = dep;
                 }
             }
 
-            if (departureTime) {
-                const [depHours, depMinutes, depSeconds] = departureTime.split(':').map(Number);
-                if (depHours > 23) {
-                    const depDayOffset = Math.floor(depHours / 24);
-                    const formattedDepTime = `${(depHours % 24).toString().padStart(2, '0')}:${depMinutes.toString().padStart(2, '0')}:${depSeconds.toString().padStart(2, '0')}`;
-                    tpt.appendChild(xmlDoc.createElement('DepartureTime')).textContent = formattedDepTime;
-                    tpt.appendChild(xmlDoc.createElement('DepartureDayOffset')).textContent = depDayOffset.toString();
-                } else {
-                    const formattedDepartureTime = `${depHours.toString().padStart(2, '0')}:${depMinutes.toString().padStart(2, '0')}:${depSeconds.toString().padStart(2, '0')}`;
-                    tpt.appendChild(xmlDoc.createElement('DepartureTime')).textContent = formattedDepartureTime;
+            // Append in correct NeTEx order
+            if (writeArrival && arr) {
+                const arrivalEl = xmlDoc.createElement('ArrivalTime');
+                arrivalEl.textContent = arr.time;
+                tpt.appendChild(arrivalEl);
+
+                if (arr.dayOffset !== undefined) {
+                    const arrOffsetEl = xmlDoc.createElement('ArrivalDayOffset');
+                    arrOffsetEl.textContent = arr.dayOffset.toString();
+                    tpt.appendChild(arrOffsetEl);
+                }
+            }
+
+            if (writeDeparture && dep) {
+                const depEl = xmlDoc.createElement('DepartureTime');
+                depEl.textContent = dep.time;
+                tpt.appendChild(depEl);
+
+                if (dep.dayOffset !== undefined) {
+                    const depOffsetEl = xmlDoc.createElement('DepartureDayOffset');
+                    depOffsetEl.textContent = dep.dayOffset.toString();
+                    tpt.appendChild(depOffsetEl);
                 }
             }
         }
     }
 
-    // remove possibly empty container element as not allowed by schema
+    // Remove destinationDisplays if empty (schema compliance)
     if (destinationDisplays.childNodes.length === 0) {
         serviceFrame.removeChild(destinationDisplays);
     }
 }
-
 // Validation currently not used
 //const xsdContent = fs.readFileSync('./src/netex/xsd/schema/1.03/xsd/NeTEx_publication.xsd', 'utf8');
 //const cwd = process.cwd();

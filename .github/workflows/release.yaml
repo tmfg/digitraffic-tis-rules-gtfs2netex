@@ -27,7 +27,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: lts/iron  # 20.9.x
           cache: 'npm'
@@ -59,7 +59,7 @@ jobs:
           echo "VERSION_STRING=$(npm version ${{ env.VERSION_ADJUSTMENT }} --git-tag-version=false)" >> $GITHUB_ENV
 
       - name: Commit version adjustments
-        uses: stefanzweifel/git-auto-commit-action@v6
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: Update project version to ${{ env.VERSION_STRING }} (${{ env.VERSION_ADJUSTMENT }}) [skip ci]
           commit_user_name: Fintraffic GitHub Actions Bot

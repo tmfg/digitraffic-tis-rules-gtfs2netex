@@ -34,6 +34,7 @@ import {
 } from "./utils";
 import { createDayTypesForRoute } from "./daytypes";
 import { rootLogger } from "../utils/logger";
+import { writeAllStopsStreaming } from "./writestops";
 
 const log = rootLogger.child({src: 'netex.ts'});
 
@@ -47,7 +48,7 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string, stopsOnly: boolean = fal
     stats.ServiceJourneys = 0;
     stats.Lines = gtfs.routes.length;
 
-    const gcFrequency = 25; // Trigger GC every 25 objects (if enabled)
+    const gcFrequency = 5; // Trigger GC every 5 objects (if enabled)
     let lastGcCall = 0;
 
     for (let i = 0; i < gtfs.routes.length; i++) {
@@ -88,49 +89,37 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string, stopsOnly: boolean = fal
         // Clear the XML document from memory
         xmlDoc.removeChild(xmlDoc.documentElement!);
 
-        // Trigger garbage collection periodically
+        // Force GC periodically (configurable frequency)
         if (typeof global.gc === 'function' && i - lastGcCall >= gcFrequency) {
             global.gc();
             lastGcCall = i;
-            log.info(`Explicit garbage collection triggered after processing ${i} routes.`);
+            const used = process.memoryUsage();
+            log.info(
+                `[GC] after route ${i + 1}/${gtfs.routes.length} — heapUsed: ${(used.heapUsed / 1024 / 1024).toFixed(1)} MB, rss: ${(used.rss / 1024 / 1024).toFixed(1)} MB`
+            );
         }
 
         log.info(`...done. (stop count: ${Object.keys(stopPlacesMap).length})`);
     }
 
-    log.info('Writing all stops...');
-    const allStopsDoc = createNetexDocumentTemplate(true);
-    const siteFrame = getElementFromDocument('//SiteFrame', allStopsDoc) as Element;
-    const stopPlaces = allStopsDoc.createElement('stopPlaces');
-    siteFrame.appendChild(stopPlaces);
-
-    const allStopPlaces = Object.values(stopPlacesMap);
-
-    lastGcCall = 0;
-    for (let i = 0; i < allStopPlaces.length; i++) {
-        const stopPlace = allStopPlaces[i];
-        stopPlaces.appendChild(stopPlace.cloneNode(true)); // Clone the stop place
-
-        if (typeof global.gc === 'function' && i - lastGcCall >= gcFrequency) {
-            global.gc();
-            lastGcCall = i;
-            log.info(`Explicit garbage collection triggered after processing ${i} stop places.`);
-        }
-    }
-
-    stats.StopPlaces = allStopPlaces.length;
-    stats.Quays = getCountFromXPath('count(//Quay)', allStopsDoc);
-
+    log.info("Writing all stops...");
     let publisherName = gtfs.feed_info?.[0]?.feed_publisher_name;
-    publisherName = publisherName ? _.camelCase(publisherName).slice(0, 3).toLowerCase() : 'oth';
-    const stopsFileName = `${publisherName}_all_stops.xml`;
-    writeXmlDocToFile(allStopsDoc, filePath, stopsFileName);
+    publisherName = publisherName
+        ? _.camelCase(publisherName).slice(0, 3).toLowerCase()
+        : "oth";
+
+    // Now the streaming function returns the counts
+    const { stopPlaceCount, quayCount } =
+        writeAllStopsStreaming(stopPlacesMap, filePath, publisherName);
+
+    stats.StopPlaces = stopPlaceCount;
+    stats.Quays = quayCount;
 
     const statsFileName = `${publisherName}_stats.json`;
     writeStatsToFile(stats, filePath, statsFileName);
 
-    log.info(`Wrote ${allStopPlaces.length} stop places.`);
-    return '';
+    log.info(`Wrote ${stopPlaceCount} stop places.`);
+    return "";
 }
 
 function createNetexDocumentTemplate(stopsOnly: boolean): Document {

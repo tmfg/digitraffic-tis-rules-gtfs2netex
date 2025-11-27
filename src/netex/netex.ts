@@ -50,6 +50,7 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string, stopsOnly: boolean = fal
 
     const gcFrequency = 5; // Trigger GC every 5 objects (if enabled)
     let lastGcCall = 0;
+    const formatXML = gtfs.routes.length <= 99; // Format XML only for small datasets
 
     for (let i = 0; i < gtfs.routes.length; i++) {
         const route = gtfs.routes[i];
@@ -83,7 +84,7 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string, stopsOnly: boolean = fal
             replaceAttributeContainingString(xmlDoc, 'ref', 'perille_', 'Fintraffic_');
 
             const fileName = _.snakeCase(lineId.replace('perille_', 'Fintraffic_')) + '.xml';
-            writeXmlDocToFile(xmlDoc, filePath, fileName);
+            writeXmlDocToFile(xmlDoc, filePath, fileName, formatXML);
         }
 
         // Clear the XML document from memory

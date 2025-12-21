@@ -341,12 +341,14 @@ function getTranslationsMap(
     return translationsMap;
 }
 
-function writeXmlDocToFile(xmlDoc: Document, outputPath: string, filename: string): void {
+function writeXmlDocToFile(xmlDoc: Document, outputPath: string, filename: string, format: boolean = true): void {
     const xmlSerializer = new XMLSerializer();
     let xmlString = xmlSerializer.serializeToString(xmlDoc);
 
     xmlString = `<?xml version="1.0" encoding="UTF-8"?>\n` + xmlString;
-    xmlString = xmlFormat(xmlString, { collapseContent: true, indentation: '  ' });
+    if (format) {
+        xmlString = xmlFormat(xmlString, {collapseContent: true, indentation: '  '});
+    }
 
     const filePath = `${outputPath}/${filename}`;
 

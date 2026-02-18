@@ -28,6 +28,7 @@ if (!gtfs || !netex) {
     console.error('Both GTFS file name and NeTEx directory are required.');
     program.help();
 } else {
+    const startTime = new Date();
     // Check if the NeTEx directory exists, create it if not
     if (!fs.existsSync(netex)) {
         fs.mkdirSync(netex, { recursive: true });
@@ -39,7 +40,9 @@ if (!gtfs || !netex) {
 
     convertGtfs(gtfsFilePath, netexDirPath, stopsOnly)
         .then(() => {
-            log.info('Conversion completed successfully.');
+            const endTime = new Date();
+            const duration = (endTime.getTime() - startTime.getTime()) / 1000;
+            log.info(`Conversion completed successfully. Duration: ${duration} seconds.`);
         })
         .catch((error) => {
             log.error('Error during conversion: ' + error);

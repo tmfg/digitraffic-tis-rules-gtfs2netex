@@ -39,6 +39,9 @@ const log = rootLogger.child({src: 'netex.ts'});
 async function writeNeTEx(gtfs: Gtfs, filePath: string, stopsOnly: boolean = false): Promise<string> {
     const stoptimesIndex = indexStopTimesByTripId(gtfs);
     const stopIndex = indexStopsById(gtfs);
+
+    // Document for StopPlace elements (to be reused across route documents) for memory efficiency
+    const stopPlaceDoc = createNetexDocumentTemplate(false);
     const stopPlacesMap: { [stopPlaceId: string]: Element } = {};
 
     const stats: Stats = {} as Stats;
@@ -68,7 +71,7 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string, stopsOnly: boolean = fal
         addCompositeFrameValidity(xmlDoc, compositeFrame, gtfs, cs);
 
         const networkId = fillNetwork(xmlDoc, serviceFrame, resourceFrame, agency, feedInfo as FeedInfo);
-        createNetexStops(gtfs, xmlDoc, route, stopIndex, stoptimesIndex, stopPlacesMap);
+        createNetexStops(gtfs, xmlDoc, route, stopIndex, stoptimesIndex, stopPlacesMap, stopPlaceDoc);
 
         if (!stopsOnly) {
             const operator = createNetexOperatorFromGtfsRoute(gtfs, organisations, route);
@@ -447,6 +450,7 @@ function createNetexStops(
     stopIndex: { [p: string]: Stop },
     stoptimesIndex: { [trip_id: string]: StopTime[] },
     stopPlacesMap: { [stopPlaceId: string]: Element },
+    stopPlaceDoc: Document,
     allStopsOnly = false
 ): void {
     const agency = findAgencyForId(gtfs, gtfsRoute.agency_id);
@@ -529,14 +533,14 @@ function createNetexStops(
             }
 
             setTransportModeWithPriority(stopPlace, gtfsRoute.route_type, stopCs);
-            stopPlacesMap[stopPlaceId] = stopPlace;
+            stopPlacesMap[stopPlaceId] = cloneStopPlace(stopPlace, stopPlaceDoc);
         } else {
             let existingStopPlaceInDocument = getElementFromElement(`.//StopPlace[@id="${stopPlaceId}"]`, stopPlaces as Element);
             if (!existingStopPlaceInDocument) {
                 const clonedStopPlace = stopPlace.cloneNode(true) as Element;
                 stopPlaces.appendChild(clonedStopPlace);
                 setTransportModeWithPriority(clonedStopPlace, gtfsRoute.route_type, stopCs);
-                stopPlacesMap[stopPlaceId] = clonedStopPlace;
+                stopPlacesMap[stopPlaceId] = cloneStopPlace(clonedStopPlace, stopPlaceDoc);
                 stopPlace = clonedStopPlace;
             } else {
                 stopPlace = existingStopPlaceInDocument;
@@ -607,8 +611,15 @@ function createNetexStops(
             }
         }
 
-        stopPlacesMap[stopPlaceId] = stopPlace;
+        stopPlacesMap[stopPlaceId] = cloneStopPlace(stopPlace, stopPlaceDoc);
     }
+}
+
+function cloneStopPlace(stopPlace: Element, stopPlaceDoc: Document): Element {
+  // Clone the stop place element and all its children
+  const clone = stopPlace.cloneNode(true) as Element;
+  stopPlaceDoc.documentElement?.appendChild(clone);
+  return clone;
 }
 
 function createNetexServiceLinks(

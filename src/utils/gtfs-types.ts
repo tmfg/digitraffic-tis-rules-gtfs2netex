@@ -183,7 +183,7 @@ interface Gtfs {
     calendar_dates: CalendarDate[],
     stop_times: StopTime[],
     trips: Trip[],
-    shapes?: Shape[],
+    shapes?: { [key: string]: Shape[] },
     translations?: Translation[],
     feed_info?: FeedInfo[], // array for now so write-gtfs works, remember to have only one element though
 }

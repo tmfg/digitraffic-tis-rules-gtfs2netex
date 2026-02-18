@@ -642,9 +642,10 @@ function createNetexServiceLinks(
     const tripsForRoute: Trip[] = gtfs.trips.filter((trip) => trip.route_id === gtfsRoute.route_id);
 
     for (const trip of tripsForRoute) {
-        const shapes = gtfs.shapes || [];
+        const shapes = gtfs.shapes || {};
+        const shapesForRoute = shapes[trip.shape_id] || [];
 
-        const shape = shapes.find((s) => s.shape_id === trip.shape_id);
+        const shape = shapesForRoute.find((s) => s.shape_id === trip.shape_id);
         if (!shape || processedShapes.has(shape.shape_id)) {
             continue; // Skip duplicates
         }
@@ -663,8 +664,7 @@ function createNetexServiceLinks(
         linkSequenceProjection.setAttribute('id', `${cs}LinkSequenceProjection:${nShapeId}`);
 
         // Collect all coordinates for this shape
-        const coordinates: [number, number][] = shapes
-            .filter((s) => s.shape_id === shape.shape_id)
+        const coordinates: [number, number][] = shapesForRoute
             .map((s) => [s.shape_pt_lat, s.shape_pt_lon]);
 
         const gmlLineString = linkSequenceProjection.appendChild(xmlDoc.createElement('gml:LineString')) as Element;

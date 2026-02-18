@@ -117,7 +117,17 @@ async function readGtfsZip(filePath: string): Promise<Gtfs> {
         stops: stopsObjects.map(objectToStop),
         stop_times: stopTimesObjects.map(o => o as StopTime),
         trips: tripsObjects.map(o => o as Trip),
-        shapes: shapesObjects.map(o => o as Shape),
+        shapes: shapesObjects.reduce((acc: { [key: string]: Shape[] }, o) => {
+            const shape = o as Shape;
+            const shapeId = shape.shape_id;
+            if (shapeId) {
+                if (!acc[shapeId]) {
+                    acc[shapeId] = [];
+                }
+                acc[shapeId].push(shape);
+            }
+            return acc;
+        }, {}),
         translations: transObjects.map(o => o as Translation),
         feed_info: feedInfoObjects.map(o => o as FeedInfo)
     } as Gtfs;

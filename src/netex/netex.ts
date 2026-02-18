@@ -49,7 +49,7 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string, stopsOnly: boolean = fal
     stats.ServiceJourneys = 0;
     stats.Lines = gtfs.routes.length;
 
-    const gcFrequency = 5; // Trigger GC every 5 objects (if enabled)
+    const gcFrequency = 50; // Trigger GC every 50 objects (if enabled)
     let lastGcCall = 0;
     const formatXML = gtfs.routes.length <= 99; // Format XML only for small datasets
 

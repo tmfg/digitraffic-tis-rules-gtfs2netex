@@ -14,7 +14,7 @@ function closeZip(zip: StreamZip) {
     }
 }
 
-async function readObjects(stream: NodeJS.ReadableStream, filePath: string, entry: string): Promise<Array<object>> {
+async function readObjects(stream: NodeJS.ReadableStream, filePath: string, entry: string, ignoredKeys?: string[]): Promise<Array<object>> {
     return new Promise<Array<object>>((resolve, reject) => {
         const columnIndex = new Map<string, number>();
         const array = new Array<object>();
@@ -33,7 +33,7 @@ async function readObjects(stream: NodeJS.ReadableStream, filePath: string, entr
                         const index = columnIndex.get(key);
                         if (_.isNumber(index)) {
                             const value = row[index];
-                            if ( _.isString(value) && value.trim().length > 0 ) {
+                            if ( _.isString(value) && value.trim().length > 0 && (!ignoredKeys || !ignoredKeys.includes(key)) ) {
                                 const keyToSet = key === 'digistop_id' ? 'stop_digiroad_id' : key;
                                 _.set(entry, keyToSet, row[index]);
                             }
@@ -53,7 +53,7 @@ async function readObjects(stream: NodeJS.ReadableStream, filePath: string, entr
     });
 }
 
-async function readEntry(filePath: string, entry: string): Promise<object[]> {
+async function readEntry(filePath: string, entry: string, ignoredKeys?: string[]): Promise<object[]> {
     const isZip = await isZipFile(filePath);
     return new Promise<object[]>((resolve, reject) => {
         if ( isZip ) {
@@ -64,7 +64,7 @@ async function readEntry(filePath: string, entry: string): Promise<object[]> {
             zip.on('ready', () => {
                 zip.stream(entry, (err, stm) => {
                     if (stm) {
-                        readObjects(stm, filePath, entry).then(objects => {
+                        readObjects(stm, filePath, entry, ignoredKeys).then(objects => {
                             closeZip(zip);
                             resolve(objects);
                         });
@@ -105,7 +105,7 @@ async function readGtfsZip(filePath: string): Promise<Gtfs> {
     const stopsObjects = await readEntry(filePath, 'stops.txt');
     const stopTimesObjects = await readEntry(filePath, 'stop_times.txt');
     const tripsObjects = await readEntry(filePath, 'trips.txt');
-    const shapesObjects = await readEntry(filePath, 'shapes.txt');
+    const shapesObjects = await readEntry(filePath, 'shapes.txt', ['shape_dist_traveled']);
     const transObjects = await readEntry(filePath, 'translations.txt');
     const feedInfoObjects = await readEntry(filePath, 'feed_info.txt');
     const gtfs = {

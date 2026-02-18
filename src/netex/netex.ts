@@ -16,7 +16,6 @@ import {
     writeStatsToFile,
     indexStopTimesByTripId,
     indexStopsById,
-    replaceAttributeContainingString,
     getTranslationsMap,
     addAccessibilityAssessment,
     createDestinationDisplayForTrip,
@@ -25,7 +24,6 @@ import {
     normalizeGtfsId,
     getElementFromElement,
     getElementFromDocument,
-    getCountFromXPath,
     addCompositeFrameValidity,
     ensureAuthorityInResourceFrame,
     ensureFallbackDayType,
@@ -79,9 +77,6 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string, stopsOnly: boolean = fal
             const dayTypes = createDayTypesForRoute(gtfs, serviceCalendarFrame, route, agency);
             createNetexJourneys(gtfs, xmlDoc, route, dayTypes, operator, line, agency, feedInfo as FeedInfo, stoptimesIndex, stats);
             createNetexServiceLinks(gtfs, xmlDoc, route, stoptimesIndex);
-
-            replaceAttributeContainingString(xmlDoc, 'id', 'perille_', 'Fintraffic_');
-            replaceAttributeContainingString(xmlDoc, 'ref', 'perille_', 'Fintraffic_');
 
             const fileName = _.snakeCase(lineId.replace('perille_', 'Fintraffic_')) + '.xml';
             writeXmlDocToFile(xmlDoc, filePath, fileName, formatXML);

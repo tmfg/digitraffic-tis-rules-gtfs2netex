@@ -16,7 +16,6 @@ import {
     writeStatsToFile,
     indexStopTimesByTripId,
     indexStopsById,
-    replaceAttributeContainingString,
     getTranslationsMap,
     addAccessibilityAssessment,
     createDestinationDisplayForTrip,
@@ -25,7 +24,6 @@ import {
     normalizeGtfsId,
     getElementFromElement,
     getElementFromDocument,
-    getCountFromXPath,
     addCompositeFrameValidity,
     ensureAuthorityInResourceFrame,
     ensureFallbackDayType,
@@ -41,6 +39,9 @@ const log = rootLogger.child({src: 'netex.ts'});
 async function writeNeTEx(gtfs: Gtfs, filePath: string, stopsOnly: boolean = false): Promise<string> {
     const stoptimesIndex = indexStopTimesByTripId(gtfs);
     const stopIndex = indexStopsById(gtfs);
+
+    // Document for StopPlace elements (to be reused across route documents) for memory efficiency
+    const stopPlaceDoc = createNetexDocumentTemplate(false);
     const stopPlacesMap: { [stopPlaceId: string]: Element } = {};
 
     const stats: Stats = {} as Stats;
@@ -48,7 +49,7 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string, stopsOnly: boolean = fal
     stats.ServiceJourneys = 0;
     stats.Lines = gtfs.routes.length;
 
-    const gcFrequency = 5; // Trigger GC every 5 objects (if enabled)
+    const gcFrequency = 50; // Trigger GC every 50 objects (if enabled)
     let lastGcCall = 0;
     const formatXML = gtfs.routes.length <= 99; // Format XML only for small datasets
 
@@ -70,7 +71,7 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string, stopsOnly: boolean = fal
         addCompositeFrameValidity(xmlDoc, compositeFrame, gtfs, cs);
 
         const networkId = fillNetwork(xmlDoc, serviceFrame, resourceFrame, agency, feedInfo as FeedInfo);
-        createNetexStops(gtfs, xmlDoc, route, stopIndex, stoptimesIndex, stopPlacesMap);
+        createNetexStops(gtfs, xmlDoc, route, stopIndex, stoptimesIndex, stopPlacesMap, stopPlaceDoc);
 
         if (!stopsOnly) {
             const operator = createNetexOperatorFromGtfsRoute(gtfs, organisations, route);
@@ -79,9 +80,6 @@ async function writeNeTEx(gtfs: Gtfs, filePath: string, stopsOnly: boolean = fal
             const dayTypes = createDayTypesForRoute(gtfs, serviceCalendarFrame, route, agency);
             createNetexJourneys(gtfs, xmlDoc, route, dayTypes, operator, line, agency, feedInfo as FeedInfo, stoptimesIndex, stats);
             createNetexServiceLinks(gtfs, xmlDoc, route, stoptimesIndex);
-
-            replaceAttributeContainingString(xmlDoc, 'id', 'perille_', 'Fintraffic_');
-            replaceAttributeContainingString(xmlDoc, 'ref', 'perille_', 'Fintraffic_');
 
             const fileName = _.snakeCase(lineId.replace('perille_', 'Fintraffic_')) + '.xml';
             writeXmlDocToFile(xmlDoc, filePath, fileName, formatXML);
@@ -452,6 +450,7 @@ function createNetexStops(
     stopIndex: { [p: string]: Stop },
     stoptimesIndex: { [trip_id: string]: StopTime[] },
     stopPlacesMap: { [stopPlaceId: string]: Element },
+    stopPlaceDoc: Document,
     allStopsOnly = false
 ): void {
     const agency = findAgencyForId(gtfs, gtfsRoute.agency_id);
@@ -534,14 +533,14 @@ function createNetexStops(
             }
 
             setTransportModeWithPriority(stopPlace, gtfsRoute.route_type, stopCs);
-            stopPlacesMap[stopPlaceId] = stopPlace;
+            stopPlacesMap[stopPlaceId] = cloneStopPlace(stopPlace, stopPlaceDoc);
         } else {
             let existingStopPlaceInDocument = getElementFromElement(`.//StopPlace[@id="${stopPlaceId}"]`, stopPlaces as Element);
             if (!existingStopPlaceInDocument) {
                 const clonedStopPlace = stopPlace.cloneNode(true) as Element;
                 stopPlaces.appendChild(clonedStopPlace);
                 setTransportModeWithPriority(clonedStopPlace, gtfsRoute.route_type, stopCs);
-                stopPlacesMap[stopPlaceId] = clonedStopPlace;
+                stopPlacesMap[stopPlaceId] = cloneStopPlace(clonedStopPlace, stopPlaceDoc);
                 stopPlace = clonedStopPlace;
             } else {
                 stopPlace = existingStopPlaceInDocument;
@@ -612,8 +611,15 @@ function createNetexStops(
             }
         }
 
-        stopPlacesMap[stopPlaceId] = stopPlace;
+        stopPlacesMap[stopPlaceId] = cloneStopPlace(stopPlace, stopPlaceDoc);
     }
+}
+
+function cloneStopPlace(stopPlace: Element, stopPlaceDoc: Document): Element {
+  // Clone the stop place element and all its children
+  const clone = stopPlace.cloneNode(true) as Element;
+  stopPlaceDoc.documentElement?.appendChild(clone);
+  return clone;
 }
 
 function createNetexServiceLinks(
@@ -636,9 +642,10 @@ function createNetexServiceLinks(
     const tripsForRoute: Trip[] = gtfs.trips.filter((trip) => trip.route_id === gtfsRoute.route_id);
 
     for (const trip of tripsForRoute) {
-        const shapes = gtfs.shapes || [];
+        const shapes = gtfs.shapes || {};
+        const shapesForRoute = shapes[trip.shape_id] || [];
 
-        const shape = shapes.find((s) => s.shape_id === trip.shape_id);
+        const shape = shapesForRoute.find((s) => s.shape_id === trip.shape_id);
         if (!shape || processedShapes.has(shape.shape_id)) {
             continue; // Skip duplicates
         }
@@ -657,8 +664,7 @@ function createNetexServiceLinks(
         linkSequenceProjection.setAttribute('id', `${cs}LinkSequenceProjection:${nShapeId}`);
 
         // Collect all coordinates for this shape
-        const coordinates: [number, number][] = shapes
-            .filter((s) => s.shape_id === shape.shape_id)
+        const coordinates: [number, number][] = shapesForRoute
             .map((s) => [s.shape_pt_lat, s.shape_pt_lon]);
 
         const gmlLineString = linkSequenceProjection.appendChild(xmlDoc.createElement('gml:LineString')) as Element;

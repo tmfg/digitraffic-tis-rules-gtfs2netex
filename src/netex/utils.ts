@@ -24,10 +24,6 @@ function findAgencyForId(gtfs: Gtfs, agencyId: string): Agency {
     return gtfs.agency.find((a) => a.agency_id === agencyId) as Agency;
 }
 
-function findRouteForId(gtfs: Gtfs, routeId: string): Route {
-    return gtfs.routes.find((r) => r.route_id === routeId) as Route;
-}
-
 function findTripsForRouteId(gtfs: Gtfs, routeId: string): Trip[] {
     return gtfs.trips.filter((t) => t.route_id === routeId) as Trip[];
 }
@@ -91,22 +87,9 @@ function findStopTimesForTripId(stopTimesByTripId: { [trip_id: string]: StopTime
     return unsorted.sort((a, b) => a.stop_sequence - b.stop_sequence);
 }
 
-function findParentStop(gtfs: Gtfs, stop: Stop, stopsIndex: { [stop_id: string]: Stop }): Stop | undefined {
-    const parentStopId = stop.parent_station;
-    if (parentStopId && stopsIndex.hasOwnProperty(parentStopId)) {
-        return stopsIndex[parentStopId];
-    }
-    return undefined;
-}
-
 function getNetexLineId(gtfsRoute: Route, agency: Agency, feedInfo: FeedInfo): string {
     const codeSpace = getCodeSpaceForAgency(agency, feedInfo);
     return codeSpace + 'Line' + ':' + gtfsRoute.route_id;
-}
-
-function getNetexRouteId(gtfsRoute: Route, agency: Agency, feedInfo: FeedInfo): string {
-    const codeSpace = getCodeSpaceForAgency(agency, feedInfo);
-    return codeSpace + 'Route' + ':' + gtfsRoute.route_id;
 }
 
 function getNetexOperatorId(gtfsAgency: Agency): string {
@@ -234,35 +217,6 @@ function getCodeSpaceForAgencyByUrl(url: string): string {
         return 'LIN:';
     }
     return '';
-}
-
-function replaceAttributeContainingString(
-    xmlDoc: Document,
-    attributeName: string,
-    searchString: string,
-    replacement: string
-): void {
-    // XPath query to find all elements with an attribute containing the search string
-    const xpathQuery = `//*[contains(@${attributeName}, '${searchString}')]`;
-
-    // Select matching nodes using xpath and safely cast
-    const nodes= getElementsFromNode(xpathQuery, xmlDoc);
-
-    // Ensure it's an array of Nodes
-    const nodeArray = Array.isArray(nodes) ? nodes.filter(n => n instanceof XmlNode) as XmlNode[] : [];
-
-    // Replace the attribute value for each matching element
-    for (const node of nodeArray) {
-        if (node.nodeType === 1) { // Node.ELEMENT_NODE (ensures it's an Element)
-            const element = node as Element;
-            const attrValue = element.getAttribute(attributeName);
-
-            if (attrValue && attrValue.includes(searchString)) {
-                const newValue = attrValue.replace(new RegExp(searchString, 'g'), replacement);
-                element.setAttribute(attributeName, newValue);
-            }
-        }
-    }
 }
 
 function addAccessibilityAssessment(
@@ -600,40 +554,6 @@ function getElementFromElement(expression: string, element: Element): Element | 
     return result instanceof Element ? result : null;
 }
 
-// Safely get a single Element from a Node
-function getElementFromNode(expression: string, node: XmlNode): Element | null {
-    // @ts-ignore
-    const result = xpath.select1(expression, node as unknown as Node); // Explicitly cast as Node
-    return result instanceof Element ? result : null;
-}
-
-// Safely get multiple Elements from a Node
-function getElementsFromNode(expression: string, node: XmlNode): Element[] {
-    // @ts-ignore
-    const results = xpath.select(expression, node as unknown as Node);
-
-    if (!results) return [];
-
-    // Ensure the result is an array and filter Elements, then assert type as Element[]
-    return (Array.isArray(results)
-        ? results.filter((item) => item instanceof Element)
-        : []) as Element[];
-}
-
-function getCountFromXPath(expression: string, doc: Document): number {
-    const result = xpath.select(expression, doc as unknown as Node); // Cast Document to Node
-
-    if (typeof result === 'number') {
-        return result;
-    } else if (typeof result === 'string') {
-        return parseFloat(result); // Convert string result to number
-    } else if (Array.isArray(result) && result.length === 1 && typeof result[0] === 'number') {
-        return result[0];
-    }
-
-    throw new Error(`Unexpected result type for XPath count expression: ${expression}`);
-}
-
 function addCompositeFrameValidity(
     xmlDoc: Document,
     compositeFrame: Element,
@@ -836,13 +756,6 @@ function ensureFallbackDayType(xmlDoc: Document, cs: string): Element {
     return fallback;
 }
 
-function removeEmptyContainers(...containers: Element[]) {
-    for (const el of containers) {
-        if (el && el.childNodes.length === 0) {
-            el.parentNode?.removeChild(el);
-        }
-    }
-}
 function buildStopPointInJourneyPatternId(cs: string, journeyPatternId: string, stopId: string, index: number): string {
     // Extract the identifier part after "JourneyPattern:"
     const jpKey =
@@ -876,26 +789,22 @@ function normalizeGtfsId(id: string): string {
 export {
     Stats,
     findAgencyForId,
-    findRouteForId,
     findTripsForRouteId,
     findStopsForTrips,
     findStopTimesForTripId,
     indexStopTimesByTripId,
     indexStopsById,
     getNetexLineId,
-    getNetexRouteId,
     getNetexOperatorId,
     getTransportMode,
     getStopPlaceType,
     findCalendarsForTrips,
     findCalendarDatesForTrips,
     getCodeSpaceForAgency,
-    replaceAttributeContainingString,
     writeXmlDocToFile,
     writeStatsToFile,
     addAccessibilityAssessment,
     getTranslationsMap,
-    findParentStop,
     createDestinationDisplayForTrip,
     createDestinationDisplayForStopTime,
     setTransportModeWithPriority,
@@ -903,13 +812,9 @@ export {
     formatTime,
     normalizeGtfsId,
     normalizeServiceId,
-    removeEmptyContainers,
     getElementFromDocument,
     getElementFromElement,
-    getElementFromNode,
-    getElementsFromNode,
     addCompositeFrameValidity,
     ensureAuthorityInResourceFrame,
     ensureFallbackDayType,
-    getCountFromXPath
 };

@@ -1,5 +1,4 @@
-ARG NODE_VERSION=24.22.0
-FROM node:${NODE_VERSION}-alpine AS build
+FROM node:24.22.0-alpine AS build
 
 WORKDIR /usr/src/app
 
@@ -10,7 +9,7 @@ RUN npm ci
 COPY ./src/ ./src/
 RUN npm run build
 
-FROM node:${NODE_VERSION}-alpine
+FROM node:24.22.0-alpine
 WORKDIR /usr/src/app
 # copy built files and dependencies
 COPY --from=build /usr/src/app/node_modules ./node_modules

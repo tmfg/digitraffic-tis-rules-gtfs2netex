@@ -12,6 +12,13 @@ updates:
         dependency-type: "development"
       prod-deps:
         dependency-type: "production"
+  # keep the pinned Node base image in the Dockerfile up to date
+  - package-ecosystem: 'docker'
+    directory: '/'
+    schedule:
+      interval: 'monthly'
+    cooldown:
+      default-days: 7
   # keep used GitHub Actions up to date
   - package-ecosystem: "github-actions"
     directory: "/"

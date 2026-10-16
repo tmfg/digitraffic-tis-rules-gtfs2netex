@@ -19,6 +19,10 @@ updates:
       interval: 'monthly'
     cooldown:
       default-days: 7
+    ignore:
+      # Ignore updates to Node versions other than 24
+      - dependency-name: 'node'
+        update-types: [ 'version-update:semver-major' ]
   # keep used GitHub Actions up to date
   - package-ecosystem: "github-actions"
     directory: "/"

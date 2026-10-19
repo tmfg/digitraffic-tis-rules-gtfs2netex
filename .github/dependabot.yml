@@ -12,6 +12,10 @@ updates:
         dependency-type: "development"
       prod-deps:
         dependency-type: "production"
+    ignore:
+      # Keep @types/node on the Node runtime major (24)
+      - dependency-name: '@types/node'
+        update-types: [ 'version-update:semver-major' ]
   # keep the pinned Node base image in the Dockerfile up to date
   - package-ecosystem: 'docker'
     directory: '/'

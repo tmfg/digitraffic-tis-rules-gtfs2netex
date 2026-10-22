@@ -1,4 +1,4 @@
-FROM node:24.22.0-alpine AS build
+FROM node:24.22.1-alpine3.24@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS build
 
 WORKDIR /usr/src/app
 
@@ -9,7 +9,7 @@ RUN npm ci
 COPY ./src/ ./src/
 RUN npm run build
 
-FROM node:24.22.0-alpine
+FROM node:24.22.1-alpine3.24@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
 WORKDIR /usr/src/app
 # copy built files and dependencies
 COPY --from=build /usr/src/app/node_modules ./node_modules

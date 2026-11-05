@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { XMLSerializer } from '@xmldom/xmldom';
-import { indentDocument, MAX_INDENTED_CHILDREN } from '../../src/netex/xml-indent';
+import { Element, XMLSerializer } from '@xmldom/xmldom';
+import { indentDocument, indentElement, MAX_INDENTED_CHILDREN } from '../../src/netex/xml-indent';
 import { parse } from './xml-test-utils';
 
 function indent(xml: string): string {
@@ -124,5 +124,64 @@ describe('indentDocument', () => {
             assert.equal(result, `<A>\n  <Big>${'<i/>'.repeat(40000)}</Big>\n</A>`);
             assert.ok(elapsed < 2000, `took ${elapsed} ms`);
         });
+
+        it('applies to indentElement too', () => {
+            const content = '<i/>'.repeat(MAX_INDENTED_CHILDREN + 1);
+            const root = parse(`<A>${content}</A>`).documentElement as Element;
+
+            indentElement(root, 2);
+
+            assert.equal(new XMLSerializer().serializeToString(root), `<A>${content}</A>`);
+        });
+    });
+});
+
+describe('indentElement', () => {
+    function indentAt(xml: string, depth: number): string {
+        const root = parse(xml).documentElement as Element;
+        indentElement(root, depth);
+        return new XMLSerializer().serializeToString(root);
+    }
+
+    it('indents children relative to the base depth and puts the closing tag at the base depth', () => {
+        // The opening tag is written by the caller at the base depth, so it carries no indent here.
+        assert.equal(
+            indentAt('<A><B><C/><D/></B><E/></A>', 4),
+            [
+                '<A>',
+                '          <B>',
+                '            <C/>',
+                '            <D/>',
+                '          </B>',
+                '          <E/>',
+                '        </A>',
+            ].join('\n'),
+        );
+    });
+
+    it('gives the same result as indentDocument at depth 0', () => {
+        const xml = '<A><B><C>x</C><D/></B><P>t<b/></P></A>';
+
+        assert.equal(indentAt(xml, 0), indent(xml));
+    });
+
+    it('keeps leaf text, escaping and non-element-child elements exactly as they are', () => {
+        const xml = '<A a="x &amp; y"><N>  pad &lt; &amp; ä  </N><M>t <b>x</b></M><C><!--c--><x/></C></A>';
+
+        assert.equal(
+            indentAt(xml, 2),
+            [
+                '<A a="x &amp; y">',
+                '      <N>  pad &lt; &amp; ä  </N>',
+                '      <M>t <b>x</b></M>',
+                '      <C><!--c--><x/></C>',
+                '    </A>',
+            ].join('\n'),
+        );
+    });
+
+    it('leaves an element with no element children untouched', () => {
+        assert.equal(indentAt('<A>text</A>', 3), '<A>text</A>');
+        assert.equal(indentAt('<A/>', 3), '<A/>');
     });
 });

@@ -2,8 +2,11 @@ import { XMLSerializer, Element, Node } from '@xmldom/xmldom';
 import fs from 'fs';
 import path from 'path';
 import { rootLogger } from "../utils/logger";
+import { INDENT, indentElement } from "./xml-indent";
 
 const log = rootLogger.child({src: 'writestops.ts'});
+
+const STOP_PLACE_DEPTH = 4;
 
 export function writeAllStopsStreaming(
     stopPlacesMap: Record<string, Element>,
@@ -47,7 +50,9 @@ export function writeAllStopsStreaming(
         const quays = sp.getElementsByTagName("Quay");
         quayCount += quays.length;
 
-        stream.write("        " + serializer.serializeToString(sp) + "\n");
+        // The indenter puts the children one level deeper than the StopPlace
+        indentElement(sp, STOP_PLACE_DEPTH);
+        stream.write(INDENT.repeat(STOP_PLACE_DEPTH) + serializer.serializeToString(sp) + "\n");
 
         // Free memory
         stopPlacesMap[key] = null as any;

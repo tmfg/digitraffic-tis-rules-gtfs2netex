@@ -15,8 +15,18 @@ const MAX_INDENTED_CHILDREN = 10_000;
  */
 function indentDocument(doc: Document): void {
     if (doc.documentElement) {
-        indentChildren(doc.documentElement, 0);
+        indentElement(doc.documentElement, 0);
     }
+}
+
+/**
+ * Indents the content of an element that is, or will be, written at the given depth (two spaces per level).
+ *
+ * The children go one level deeper and the closing tag at the element's own depth. The opening tag gets no
+ * indent here, so the caller writes it at the right depth. Same rules as {@link indentDocument}.
+ */
+function indentElement(element: Element, depth: number): void {
+    indentChildren(element, depth);
 }
 
 /** A line break followed by the indent for the given depth. */
@@ -53,4 +63,4 @@ function indentChildren(parent: Element, depth: number): void {
     parent.appendChild(doc.createTextNode(lineBreakAt(depth)));
 }
 
-export { indentDocument, MAX_INDENTED_CHILDREN };
+export { indentDocument, indentElement, INDENT, MAX_INDENTED_CHILDREN };

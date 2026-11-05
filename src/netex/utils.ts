@@ -295,10 +295,8 @@ function getTranslationsMap(
     return translationsMap;
 }
 
-function writeXmlDocToFile(xmlDoc: Document, outputPath: string, filename: string, format: boolean = true): void {
-    if (format) {
-        indentDocument(xmlDoc);
-    }
+function writeXmlDocToFile(xmlDoc: Document, outputPath: string, filename: string): void {
+    indentDocument(xmlDoc);
     const xmlString = `<?xml version="1.0" encoding="UTF-8"?>\n` + new XMLSerializer().serializeToString(xmlDoc);
 
     const filePath = `${outputPath}/${filename}`;

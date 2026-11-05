@@ -14,8 +14,8 @@ const SOURCE =
 describe('writeXmlDocToFile', () => {
     let dir: string;
 
-    const write = (format: boolean): string => {
-        writeXmlDocToFile(parse(SOURCE), dir, 'out.xml', format);
+    const write = (): string => {
+        writeXmlDocToFile(parse(SOURCE), dir, 'out.xml');
         return fs.readFileSync(path.join(dir, 'out.xml'), 'utf8');
     };
 
@@ -28,7 +28,7 @@ describe('writeXmlDocToFile', () => {
     });
 
     it('writes the declaration once at the start and uses LF line endings only', () => {
-        const output = write(true);
+        const output = write();
 
         assert.ok(output.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<Root '));
         assert.equal(output.match(/<\?xml /g)?.length, 1);
@@ -37,14 +37,14 @@ describe('writeXmlDocToFile', () => {
     });
 
     it('indents the output', () => {
-        const output = write(true);
+        const output = write();
 
         assert.ok(output.includes('\n  <Lines>\n    <Line id="L1">\n      <Name>'));
         assert.ok(output.includes('\n    </Line>\n  </Lines>\n'));
     });
 
     it('preserves leaf text exactly', () => {
-        const output = write(true);
+        const output = write();
 
         assert.ok(output.includes('<Name>  Route &amp; &lt;1&gt;  </Name>'));
         assert.ok(output.includes('<Blank> </Blank>'));
@@ -52,15 +52,9 @@ describe('writeXmlDocToFile', () => {
         assert.ok(output.includes('<Mixed>a<b>x</b>c</Mixed>'));
     });
 
-    it('is canonically equal to the unformatted output', () => {
-        assert.equal(canonical(write(true)), canonical(write(false)));
-    });
+    it('is canonically equal to the source document', () => {
+        const withoutDeclaration = write().replace(/^<\?xml [^>]*\?>\n/, '');
 
-    it('does not indent when format is false', () => {
-        const output = write(false);
-
-        assert.equal(output.includes('\n  <'), false);
-        assert.ok(output.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<Root '));
-        assert.ok(output.includes('<Lines><Line id="L1"><Name>'));
+        assert.equal(canonical(withoutDeclaration), canonical(SOURCE));
     });
 });

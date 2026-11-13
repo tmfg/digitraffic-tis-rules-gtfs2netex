@@ -8,10 +8,32 @@ updates:
       default-days: 7 # Wait 7 days for any update
       semver-major-days: 14 # Wait 14 days for major version bumps
     groups:
+      # Security fixes that are patch bumps: merge right away.
+      # Minor and major security fixes are not grouped and open as individual PRs.
+      security-patches:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+      # Must stay first among the version-update groups: a dependency goes to the first matching group.
+      patches:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+      # Minor updates. Major updates are not listed, so they open as individual PRs.
       dev-deps:
+        applies-to: version-updates
         dependency-type: "development"
+        update-types:
+          - "minor"
       prod-deps:
+        applies-to: version-updates
         dependency-type: "production"
+        update-types:
+          - "minor"
     ignore:
       # Keep @types/node on the Node runtime major (24)
       - dependency-name: '@types/node'

@@ -28,6 +28,14 @@ npm run build
 npm run convert -- --gtfs /path/to/gtfs-file.zip --netex /path/to/netex-directory
 ```
 
+### Test
+
+```shell
+npm test
+```
+
+Unit tests live in `test/`. They are compiled with `tsconfig.test.json` to `build/test-out` and run with [mocha].
+
 ### Troubleshooting
 
 In case of memory problems, try increasing node memory with --max-old-space-size and enabling manual GC calls with --expose-gc.
@@ -36,5 +44,6 @@ In case of memory problems, try increasing node memory with --max-old-space-size
 Copyright Fintraffic 2023-2026. Licensed under the EUPL-1.2 or later.
 
 [gtfs]: https://gtfs.org/
+[mocha]: https://mochajs.org/
 [netex-nordic]: https://enturas.atlassian.net/wiki/spaces/PUBLIC/pages/728891481/Nordic+NeTEx+Profile
 [ft-tis-vaco]: https://www.fintraffic.fi/fi/digitaalisetpalvelut/fintrafficin-datapalvelut/liikkumisen-tietopalvelut/validointi-ja-konvertointipalvelu

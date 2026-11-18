@@ -20,6 +20,7 @@ jobs:
 
       - run: npm ci
       - run: npm run build
+      - run: npm test
 
   sonarcloud:
     name: Run SonarCloud Analysis

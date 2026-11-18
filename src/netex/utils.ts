@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import { rootLogger } from "../utils/logger";
 import * as xpath from 'xpath';
 import { Document, Element, XMLSerializer, Node as XmlNode } from '@xmldom/xmldom';
-import xmlFormat from 'xml-formatter';
+import { indentDocument } from './xml-indent';
 import {DateTime} from "ts-luxon";
 
 const log = rootLogger.child({src: 'utils.ts'});
@@ -295,14 +295,9 @@ function getTranslationsMap(
     return translationsMap;
 }
 
-function writeXmlDocToFile(xmlDoc: Document, outputPath: string, filename: string, format: boolean = true): void {
-    const xmlSerializer = new XMLSerializer();
-    let xmlString = xmlSerializer.serializeToString(xmlDoc);
-
-    xmlString = `<?xml version="1.0" encoding="UTF-8"?>\n` + xmlString;
-    if (format) {
-        xmlString = xmlFormat(xmlString, {collapseContent: true, indentation: '  '});
-    }
+function writeXmlDocToFile(xmlDoc: Document, outputPath: string, filename: string): void {
+    indentDocument(xmlDoc);
+    const xmlString = `<?xml version="1.0" encoding="UTF-8"?>\n` + new XMLSerializer().serializeToString(xmlDoc);
 
     const filePath = `${outputPath}/${filename}`;
 
